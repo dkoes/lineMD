@@ -3,10 +3,9 @@
 # Analyze distances of discovered collisions over time
 
 from argparse import ArgumentParser
-from clash_screen import selectFrames
-from stat import S_IEXEC
-from shared import *
 from numpy import linalg, array
+from clash_screen import selectFrames
+from shared import *
 
 __author__ = 'Charles'
 
@@ -127,8 +126,6 @@ def main():
                     log(printed)
                     alldists = [item[1] for item in frameResults][0::args.outfreq]
                     # eliminate it if it does not meet the max threshold at all
-                    if max(alldists) < args.maxthres:
-                        return None
                     return clash, "TN", frameID, frameRMSD, atoms, alldists
         elif clashID < TtoNcount + CtoTcount:
             # C->T: print first negative collision
@@ -138,8 +135,6 @@ def main():
                     printed += str(clash) + " CT %i %.3f " % (frameID, frameRMSD) + str(atoms) + "\n"
                     log(printed)
                     alldists = [item[1] for item in frameResults][0::args.outfreq]
-                    if max(alldists) < args.maxthres:
-                        return None
                     return clash, "CT", frameID, frameRMSD, atoms, alldists
         else:
             # C->N: print first negative collision
@@ -149,8 +144,6 @@ def main():
                     printed += str(clash) + " CN %i %.3f " % (frameID, frameRMSD) + str(atoms) + "\n"
                     log(printed)
                     alldists = [item[1] for item in frameResults][0::args.outfreq]
-                    if max(alldists) < args.maxthres:
-                        return None
                     return clash, "CN", frameID, frameRMSD, atoms, alldists
 
     r = range(len(clashes))
@@ -172,165 +165,91 @@ def main():
         sys.stdout.write("%s %s %i %i %s %i %i %i %.3f\n" % (clashType, resNames[res1], res1, atom1,
                                                              resNames[res2], res2, atom2, ID, RMSD))
     sys.stdout.flush()
+
     if args.plotfile is not None:
-        # Write gnuplot output
+
+        def partition(c, i):
+            """Separate the input list into two lists based on the condition"""
+            tl = []
+            fl = []
+            for item in i:
+                if c(item):
+                    tl.append(item)
+                else:
+                    fl.append(item)
+            return tl, fl
+
+        # Separate based on type and whether it exceeds the minimum threshold at max distance
+        (CNlow, CN), (CTlow, CT), (TNlow, TN) = [partition(lambda v: max(v[5]) < args.minthres,
+                                                           [o for o in out if o[1] == y]) for y in ("CN", "CT", "TN")]
+
+        plotArguments = ((out, "", "All"),
+                         (CN, "CN", "Conserved to nonexistent"), (CNlow, "CNlow", "Conserved to nonexistent (low)"),
+                         (CT, "CT", "Conserved to transitory"), (CTlow, "CTlow", "Conserved to transitory (low)"),
+                         (TN, "TN", "Transitory to nonexistent"), (TNlow, "TNlow", "Transitory to nonexistent (low)"))
+        plotArguments = [t for t in plotArguments if len(t[0]) > 0]  # exclude empty categories
+
+        def chunks(q, k):
+            """Yield successive k-sized chunks from q."""
+            for p in xrange(0, len(q), k):
+                yield q[p:p + k]
+
         maxDist = int(5 * round(float(max([max(o[5]) for o in out])) / 5))  # maximum reached distance rounded to 5
-        with open(args.plotfile, 'w') as plot:
-            # write header
-            plot.write("frame ")
-            for (res1, res2), clashType, ID, RMSD, ato, dists in out:
-                plot.write("%i/%i " % (res1, res2))
-            plot.write("\n")
-            for frame in xrange(len(out[0][5])):  # number of frames
-                plot.write("%i " % frame)
-                for res, clashType, ID, RMSD, ato, dists in out:
-                    plot.write("%.3f " % dists[frame])
+
+        for l, name, fullName in plotArguments:
+            # Write gnuplot data
+            with open(args.plotfile + name, 'w') as plot:
+                # write header
+                plot.write("frame ")
+                for (res1, res2), clashType, ID, RMSD, ato, dists in l:
+                    plot.write("%i/%i " % (res1, res2))
                 plot.write("\n")
-        CN = [o for o in out if o[1] == "CN"]
-        CT = [o for o in out if o[1] == "CT"]
-        TN = [o for o in out if o[1] == "TN"]
-        with open(args.plotfile + "CN", 'w') as CNfile:
-            # write header
-            CNfile.write("frame ")
-            for (res1, res2), clashType, ID, RMSD, ato, dists in CN:
-                CNfile.write("%i/%i " % (res1, res2))
-            CNfile.write("\n")
-            for frame in xrange(len(CN[0][5])):  # number of frames
-                CNfile.write("%i " % frame)
-                for res, clashType, ID, RMSD, ato, dists in CN:
-                    CNfile.write("%.3f " % dists[frame])
-                CNfile.write("\n")
-        with open(args.plotfile + "CT", 'w') as CTfile:
-            # write header
-            CTfile.write("frame ")
-            for (res1, res2), clashType, ID, RMSD, ato, dists in CT:
-                CTfile.write("%i/%i " % (res1, res2))
-            CTfile.write("\n")
-            for frame in xrange(len(CT[0][5])):  # number of frames
-                CTfile.write("%i " % frame)
-                for res, clashType, ID, RMSD, ato, dists in CT:
-                    CTfile.write("%.3f " % dists[frame])
-                CTfile.write("\n")
-        with open(args.plotfile + "TN", 'w') as TNfile:
-            # write header
-            TNfile.write("frame ")
-            for (res1, res2), clashType, ID, RMSD, ato, dists in TN:
-                TNfile.write("%i/%i " % (res1, res2))
-            TNfile.write("\n")
-            for frame in xrange(len(TN[0][5])):  # number of frames
-                TNfile.write("%i " % frame)
-                for res, clashType, ID, RMSD, ato, dists in TN:
-                    TNfile.write("%.3f " % dists[frame])
-                TNfile.write("\n")
+                for frame in xrange(len(l[0][5])):  # number of frames
+                    plot.write("%i " % frame)
+                    for res, clashType, ID, RMSD, ato, dists in l:
+                        plot.write("%.3f " % dists[frame])
+                    plot.write("\n")
 
-        # write gnuplot scripts
-        def chunks(l, k):
-            """Yield successive k-sized chunks from l."""
-            for p in xrange(0, len(l), k):
-                yield l[p:p + k]
+                    # TODO: scatterplot with RMSD instead of frame
 
-        # Split the list into chunks
-        lastID = 0
-        for section, chunk in enumerate(list(chunks(out, args.max_plot))):
-            # write a file for gnuplot commands
-            with open("gnuplot_%i.sh" % section, 'w') as gnuplot:
-                gnuplot.write("""echo "
+            # write gnuplot scripts
+            # Split the list into chunks
+            lastID = 0
+            chunksize = args.max_plot
+            if name == "":
+                chunksize = sys.maxint  # this is the "all" section, no need to chunk
+            for section, chunk in enumerate(list(chunks(l, chunksize))):
+                # write a file for gnuplot commands
+                fileName = "gnuplot%s_%i.sh" % (name, section)
+                with open(fileName, 'w') as gnuplot:
+                    gnuplot.write("""echo "
 set term png
-set output 'gnuplot_%i.png'
-set title 'All collisions part %i'
+set output 'gnuplot%s_%i.png'
+set title '%s collisions part %i'
 set key outside vertical right top maxcols 1;
 set ylabel 'Distance (angstroms)'
 set xlabel 'Frames'
 set key autotitle columnhead
 set yrange [0:%i]
-plot '%s' using 1:%i w l, """ % (section, section + 1, maxDist, args.plotfile, lastID + 2))
-                # for each column
-                for col in xrange(len(chunk) - 1):
-                    gnuplot.write(" '' using 1:%i w l" % (col + 3 + lastID))
-                    # comma if not last
-                    if col < len(chunk) - 2:
-                        gnuplot.write(", ")
-                lastID += len(chunk)
-                # end the script
-                gnuplot.write("""
-" | gnuplot -persist
+""" % (name, section, fullName, section + 1, maxDist))
+                    if name == "":
+                        gnuplot.write("""set nokey
 """)
-            # make executable
-            os.chmod("gnuplot_%i.sh" % section, os.stat("gnuplot_%i.sh" % section).st_mode | S_IEXEC)
+                    gnuplot.write("""plot '%s' using 1:%i w l, """ % (args.plotfile + name, lastID + 2))
+                    # for each column
+                    for col in xrange(len(chunk) - 1):
+                        gnuplot.write(" '' using 1:%i w l" % (col + 3 + lastID))
+                        # comma if not last
+                        if col < len(chunk) - 2:
+                            gnuplot.write(", ")
+                    lastID += len(chunk)
 
-        lastID = 0
-        for section, chunk in enumerate(list(chunks(CN, args.max_plot))):
-            # write a file for gnuplot commands
-            with open("gnuplotCN_%i.sh" % section, 'w') as gnuplotCN:
-                gnuplotCN.write("""echo "
-set term png
-set output 'gnuplotCN_%i.png'
-set title 'Conserved to nonexistent collisions part %i'
-set key outside vertical right top maxcols 1;
-set ylabel 'Distance (angstroms)'
-set xlabel 'Frames'
-set key autotitle columnhead
-set yrange [0:%i]
-plot '%s' using 1:%i w l, """ % (section, section + 1, maxDist, args.plotfile + "CN", lastID + 2))
-                # for each column
-                for col in xrange(len(chunk) - 1):
-                    gnuplotCN.write(" '' using 1:%i w l" % (col + 3 + lastID))
-                    # comma if not last
-                    if col < len(chunk) - 2:
-                        gnuplotCN.write(", ")
-                lastID += len(chunk)
-                # end the script
-                gnuplotCN.write("""
+                    # end the script
+                    gnuplot.write("""
 " | gnuplot -persist
 """)
-            # make executable
-            os.chmod("gnuplotCN_%i.sh" % section, os.stat("gnuplotCN_%i.sh" % section).st_mode | S_IEXEC)
-
-        lastID = 0
-        for section, chunk in enumerate(list(chunks(CT, args.max_plot))):
-            with open("gnuplotCT_%i.sh" % section, 'w') as gnuplotCT:
-                gnuplotCT.write("""echo "
-set term png
-set output 'gnuplotCT_%i.png'
-set title 'Conserved to transitory collisions part %i'
-set key outside vertical right top maxcols 1;
-set ylabel 'Distance (angstroms)'
-set xlabel 'Frames'
-set key autotitle columnhead
-set yrange [0:%i]
-plot '%s' using 1:%i w l, """ % (section, section + 1, maxDist, args.plotfile + "CT", lastID + 2))
-                for col in xrange(len(chunk) - 1):
-                    gnuplotCT.write(" '' using 1:%i w l" % (col + 3 + lastID))
-                    if col < len(chunk) - 2:
-                        gnuplotCT.write(", ")
-                lastID += len(chunk)
-                gnuplotCT.write("""
-" | gnuplot -persist
-""")
-            os.chmod("gnuplotCT_%i.sh" % section, os.stat("gnuplotCT_%i.sh" % section).st_mode | S_IEXEC)
-
-        lastID = 0
-        for section, chunk in enumerate(list(chunks(TN, args.max_plot))):
-            with open("gnuplotTN_%i.sh" % section, 'w') as gnuplotTN:
-                gnuplotTN.write("""echo "
-set term png
-set output 'gnuplotTN_%i.png'
-set title 'Transitory to nonexistent collisions part %i'
-set key outside vertical right top maxcols 1;
-set ylabel 'Distance (angstroms)'
-set xlabel 'Frames'
-set key autotitle columnhead
-set yrange [0:%i]
-plot '%s' using 1:%i w l, """ % (section, section + 1, maxDist, args.plotfile + "TN", lastID + 2))
-                for col in xrange(len(chunk) - 1):
-                    gnuplotTN.write(" '' using 1:%i w l" % (col + 3 + lastID))
-                    if col < len(chunk) - 2:
-                        gnuplotTN.write(", ")
-                lastID += len(chunk)
-                gnuplotTN.write("""
-" | gnuplot -persist
-""")
-            os.chmod("gnuplotTN_%i.sh" % section, os.stat("gnuplotTN_%i.sh" % section).st_mode | S_IEXEC)
+        # make executable
+        system("chmod +x gnuplot*.sh")
 
 
 def parse():
@@ -348,8 +267,8 @@ def parse():
     parser.add_argument("--max_plot", help="maximum number of collisions per plot", type=int, default=sys.maxint)
     parser.add_argument('-t', "--thres", help="collision threshold in angstroms (default is 4)",
                         type=float, default=4.)
-    parser.add_argument("--maxthres", help="eliminate collisions that never go above this distance (default is 6)",
-                        type=float, default=6.)
+    parser.add_argument("--minthres", help="separate collisions that never go above this distance (default is 10)",
+                        type=float, default=10.)
     parser.add_argument('-c', "--collisions", help="list of collisions "
                                                    "from clash_check", type=str, action=FullPath, default="check")
     parser.add_argument('--plotfile', help="output file prefix for gnuplot", type=str, action=FullPath, default="plot")
