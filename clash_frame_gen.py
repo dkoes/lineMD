@@ -122,8 +122,8 @@ def parse():
                         default="distances")
     parser.add_argument("--dist_only", help="only export distance information, not frames",
                         action="store_true")
-    parser.add_argument("--min", help="start of distance range", type=float)
-    parser.add_argument("--max", help="end of distance range", type=float)
+    parser.add_argument("--min", help="start of distance range", type=float, default=0)
+    parser.add_argument("--max", help="end of distance range", type=float, default=sys.maxint)
     parser.add_argument("--freq", help="only keep every n frames (default is 1 for all frames)",
                         type=int, default=1)
     parser.add_argument('-O', "--override", help="override output", action="store_true")

@@ -270,8 +270,8 @@ def parse():
                         action=FullPath, default="trajectory")
     parser.add_argument('-d', "--dist", help="two column frame/distance file", type=str,
                         action=FullPath, default="distances")
-    parser.add_argument("--min", help="start of distance range", type=float)
-    parser.add_argument("--max", help="end of distance range", type=float)
+    parser.add_argument("--min", help="start of distance range", type=float, default=0)
+    parser.add_argument("--max", help="end of distance range", type=float, default=sys.maxint)
     parser.add_argument("--check_all", help="follow the collision for the whole trajectory but mark at min and max", 
                         action="store_true")
     parser.add_argument("--freq", help="only keep every n frames (default is 1 for all frames)",

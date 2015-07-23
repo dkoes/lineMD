@@ -162,8 +162,8 @@ def parse():
     """Parse command-line arguments"""
     parser = ArgumentParser(description="Analyze lineMD_RMSD output to compute "
                                         "changed clash residues")
-    parser.add_argument("--min", help="start of distance range", type=float)
-    parser.add_argument("--max", help="end of distance range", type=float)
+    parser.add_argument("--min", help="start of distance range", type=float, default=0)
+    parser.add_argument("--max", help="end of distance range", type=float, default=sys.maxint)
     parser.add_argument('-f', "--frames", help="folder containing PDBs of frames", type=str,
                         action=FullPath,
                         default="trajectory")
