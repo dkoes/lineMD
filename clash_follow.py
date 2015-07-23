@@ -59,7 +59,10 @@ def main():
     with open(DISTPATH, 'r') as distFile:
         frames = [(int(line.split()[0]), float(line.split()[1])) for line in distFile.readlines()]
 
-    frameList = selectFrames(frames, MIN, MAX, args.freq)
+    if not args.check_all:
+        frameList = selectFrames(frames, MIN, MAX, args.freq)
+    else:
+        frameList = frames[0::args.freq]
     totalFrames = len(frameList)
 
     # Set of all clashes, with three sublists sorted
@@ -200,17 +203,15 @@ def main():
             # Write gnuplot data
             with open(args.plotfile + name, 'w') as plot:
                 # write header
-                plot.write("frame ")
+                plot.write("RMSD ")
                 for (res1, res2), clashType, ID, RMSD, ato, dists in l:
                     plot.write("%i/%i " % (res1, res2))
                 plot.write("\n")
                 for frame in xrange(len(l[0][5])):  # number of frames
-                    plot.write("%i " % frame)
+                    plot.write("%.3f " % frameList[frame][1])
                     for res, clashType, ID, RMSD, ato, dists in l:
                         plot.write("%.3f " % dists[frame])
                     plot.write("\n")
-
-                    # TODO: scatterplot with RMSD instead of frame
 
             # write gnuplot scripts
             # Split the list into chunks
@@ -225,16 +226,26 @@ def main():
                     gnuplot.write("""echo "
 set term png
 set output 'gnuplot%s_%i.png'
-set title '%s collisions part %i'
-set key outside vertical right top maxcols 1;
-set ylabel 'Distance (angstroms)'
-set xlabel 'Frames'
-set key autotitle columnhead
-set yrange [0:%i]
-""" % (name, section, fullName, section + 1, maxDist))
+""" % (name, section))
                     if name == "":
-                        gnuplot.write("""set nokey
-""")
+                        gnuplot.write("""set title '%s collisions'
+set nokey
+""" % fullName)
+                    else:
+                        gnuplot.write("""set title '%s collisions part %i'
+set key autotitle columnhead outside vertical right top maxcols 1
+""" % (fullName, section + 1))
+                    gnuplot.write("""set ylabel 'Distance (angstroms)'
+set xlabel 'RMSD (angstroms)'
+set yrange [0:%i]
+set xrange [0:*] reverse
+""" % maxDist)
+                    if MIN is not None and MIN > frameList[-1][1]:
+                        gnuplot.write("""set arrow from %i,0 to %i,%i nohead lc rgb 'black'
+""" % (MIN, MIN, maxDist))
+                    if MAX is not None and MAX < frameList[0][1]:
+                        gnuplot.write("""set arrow from %i,0 to %i,%i nohead lc rgb 'black'
+""" % (MAX, MAX, maxDist))
                     gnuplot.write("""plot '%s' using 1:%i w l, """ % (args.plotfile + name, lastID + 2))
                     # for each column
                     for col in xrange(len(chunk) - 1):
@@ -259,8 +270,10 @@ def parse():
                         action=FullPath, default="trajectory")
     parser.add_argument('-d', "--dist", help="two column frame/distance file", type=str,
                         action=FullPath, default="distances")
-    parser.add_argument("--min", help="start of distance range", type=float, required=True)
-    parser.add_argument("--max", help="end of distance range", type=float, required=True)
+    parser.add_argument("--min", help="start of distance range", type=float)
+    parser.add_argument("--max", help="end of distance range", type=float)
+    parser.add_argument("--check_all", help="follow the collision for the whole trajectory but mark at min and max", 
+                        action="store_true")
     parser.add_argument("--freq", help="only keep every n frames (default is 1 for all frames)",
                         type=int, default=1)
     parser.add_argument("--outfreq", help="same as freq, but for distance output", type=int, default=1)
