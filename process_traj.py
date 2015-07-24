@@ -6,7 +6,6 @@ from __future__ import division, print_function
 from argparse import ArgumentParser
 from atom_tools import calcCenterAtoms, atomDist
 from shared import *
-from pybrella import log
 from shutil import copy
 
 __author__ = "Charles Yuan"
@@ -87,7 +86,6 @@ def parse():
                                             "Note that certain calculations are limited by "
                                             "AMBER to 3 places.",
                         type=int, action="store", default=6)
-    parser.add_argument("--log", help="log output file", type=str, action=FullPath)
     parser.add_argument("--skip", action="store_true")
     global args
     args = parser.parse_args()
