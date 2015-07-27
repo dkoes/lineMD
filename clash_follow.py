@@ -186,6 +186,11 @@ def main():
         (CNlow, CN), (CTlow, CT), (TNlow, TN) = [partition(lambda v: max(v[5]) < args.minthres,
                                                            [o for o in out if o[1] == y]) for y in ("CN", "CT", "TN")]
 
+        # Sort based on final distance
+        # clash[5] is dists, clash[5][-1] is final dist
+        (CNlow, CN, CTlow, CT, TNlow, TN) = [sorted(q, key=lambda e: e[-1][-1], reverse=True) for q in
+                                             (CNlow, CN, CTlow, CT, TNlow, TN)]
+
         plotArguments = ((out, "", "All"),
                          (CN, "CN", "Conserved to nonexistent"), (CNlow, "CNlow", "Conserved to nonexistent (low)"),
                          (CT, "CT", "Conserved to transitory"), (CTlow, "CTlow", "Conserved to transitory (low)"),
