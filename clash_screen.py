@@ -4,6 +4,7 @@
 
 from __future__ import division, print_function
 from argparse import ArgumentParser
+from collections import namedtuple
 from itertools import combinations
 from shared import *
 from numpy import array, linalg
@@ -11,6 +12,9 @@ from operator import itemgetter
 
 
 __author__ = 'Charles Yuan'
+
+Atom = namedtuple('Atom', ['ID', 'coords'])
+Point = namedtuple('Point', ['x', 'y', 'z'])
 
 
 def findCombinations(pdbLines):
@@ -20,7 +24,7 @@ def findCombinations(pdbLines):
 
     # global database of residues and constituent atoms to be used throughout
     global residues
-    residues = {}  # {residueID: [(atomID, atomCoords)]}
+    residues = {}  # {residueID: [Atom, ...], ...}
     for line in pdbLines:
         # Read line and extract the ID for valid residues
         if line[0:4] != "ATOM" or line[17:20] not in RESIDUES:
@@ -31,8 +35,19 @@ def findCombinations(pdbLines):
             # residue has not been previously seen
             residues[residueID] = []
         atomID = int(vals[1])
-        atomCoords = [float(line[(30 + i * 8):(38 + i * 8)]) for i in range(3)]
-        residues[residueID].append((atomID, atomCoords))
+        atomCoords = Point(*[float(line[(30 + i * 8):(38 + i * 8)]) for i in range(3)])
+        residues[residueID].append(Atom(atomID, atomCoords))
+
+    def center(ps):
+        """Find the center of a collection of points"""
+        size = float(len(ps))
+        return Point(sum(p.x for p in ps) / size, sum(p.y for p in ps) / size, sum(p.z for p in ps) / size)
+
+    # global database of residue center locations
+    global residueCenters
+    residueCenters = {residueID: center([atom.coords for atom in residues[residueID]]) for residueID in residues.keys()}
+    # {residueID: Point, ...}
+
     # calculate possible combinations of the residue IDs
     pairs = [pair for pair in list(combinations(residues.keys(), 2))
              if abs(pair[0] - pair[1]) > 4]  # not within 4 of each other
@@ -48,13 +63,43 @@ def findClashes(pdbLines, threshold):
     totalChecks = len(pairs)
     log("Total of %i residues, %i possible combinations\n" % (len(residues.keys()), totalChecks))
 
+    norm = linalg.norm
+
     def testPair((res1, res2)):
         """Returns whether the residues are in collision"""
-        for atom1 in residues[res1]:
-            coord1 = atom1[1]
-            for atom2 in residues[res2]:
-                coord2 = atom2[1]
-                dist = linalg.norm(abs(array(coord1) - array(coord2)))
+
+        ctr1, ctr2 = array(residueCenters[res1]), array(residueCenters[res2])
+        # Check centers, O(1)
+        dist = norm(ctr1 - ctr2)
+        if dist < threshold:
+            return True
+        # Reject if ridiculously far, 20 angstroms compared to 6 for arginine "radius"
+        if dist > 20:
+            return False
+
+        coords1 = [array(a.coords) for a in residues[res1]]
+        coords2 = [array(a.coords) for a in residues[res2]]
+
+        # Check first and center of second, O(n)
+        for coord1 in coords1:
+            dist = norm(coord1 - ctr2)
+            if dist < threshold:
+                return True
+
+        # Check second and center of first, O(n)
+        for coord2 in coords2:
+            dist = norm(coord2 - ctr1)
+            if dist < threshold:
+                return True
+
+        # Centers already do not match, so check extremes first: descending sort by distance to center
+        coords1 = sorted(coords1, key=lambda c: linalg.norm(ctr1 - c), reverse=True)
+        coords2 = sorted(coords2, key=lambda c: linalg.norm(ctr2 - c), reverse=True)
+
+        # Check both, O(n^2)
+        for coord1 in coords1:
+            for coord2 in coords2:
+                dist = norm(coord1 - coord2)
                 if dist < threshold:
                     return True
         return False
@@ -119,7 +164,7 @@ def main():
 
     # Read the distance file
     with open(DISTPATH, 'r') as distFile:
-        frames = [(int(line.split()[0]), float(line.split()[1])) for line in distFile.readlines()]
+        frames = [(int(line.split()[0]), float(line.split()[1])) for line in distFile]
 
     frameList = selectFrames(frames, MIN, MAX, args.freq)
 
@@ -132,7 +177,7 @@ def main():
     for i, frame in enumerate(frameList):
         log("Frame %i of %i\n" % (i + 1, totalFrames))
         with open(FRAMESPATH + "/%i.pdb" % frame[0], 'r') as pdb:
-            clashes = findClashes(pdb.readlines(), args.thres)
+            clashes = findClashes(list(pdb), args.thres)
         inSome = inSome.union(set(clashes))
         if first:
             inAll = set(clashes)
@@ -150,11 +195,11 @@ def main():
 
     # Print output
     log("Found %i collisions\n" % (len(transitory) + len(conserved)))
-    for item in conserved:
-        sys.stdout.write("C %i %i\n" % (item[0], item[1]))
+    for clash in conserved:
+        sys.stdout.write("C %i %i\n" % (clash[0], clash[1]))
     sys.stdout.flush()
-    for item in transitory:
-        sys.stdout.write("T %i %i\n" % (item[0], item[1]))
+    for clash in transitory:
+        sys.stdout.write("T %i %i\n" % (clash[0], clash[1]))
     sys.stdout.flush()
 
 
