@@ -105,8 +105,7 @@ def findClashes(pdbLines, threshold):
         return False
 
     # Run testPairs for each combination of residues in parallel
-    parallel = cpu_count() / 2  # half number of cores
-    output = parMap(testPair, pairs, n=parallel)
+    output = parMap(testPair, pairs, n=args.processes)
 
     # Print output
     for pairID, out in enumerate(output):
@@ -219,6 +218,8 @@ def parse():
                         default="distances")
     parser.add_argument('-t', "--thres", help="collision threshold in angstroms (default is 4)",
                         type=float, default=4.)
+    parser.add_argument('-p', "--processes", help="maximum number of processes (default is half cpu count)", type=int,
+                        default=cpu_count() / 2)
     global args
     args = parser.parse_args()
 
