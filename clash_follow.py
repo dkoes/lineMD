@@ -129,10 +129,6 @@ def main():
             # Add the minimum distance for this clash
             frameResults.append(FrameResult(frameID, minDist, minAtoms))
 
-        log(str(len(frameResults)) + "\n")
-        log(str(len(frameList)))
-        sys.exit(1)
-
         # Determine which frame to keep
         if clashID < TtoNcount:
             # T->N: print last positive collision
