@@ -3,7 +3,7 @@
 # Analyze distances of discovered collisions over time
 
 from argparse import ArgumentParser
-# from bisect import bisect_left
+from bisect import bisect_left
 from numpy import linalg, array
 from collections import namedtuple
 from clash_screen import selectFrames
@@ -108,13 +108,13 @@ def main():
     log("\n")
     # Iterate over the collisions to check each frame
     log("Checking collisions.\n")
-    #
-    # def find_ge(a, key):
-    #     """Find index, in sorted list, of first item greater than or equal to key. Returns None if not found."""
-    #     i = bisect_left(a, key)
-    #     if i == len(a):
-    #         return None
-    #     return i
+
+    def find_ge(a, key):
+        """Find index, in sorted list, of first item greater than or equal to key. Returns None if not found."""
+        i = bisect_left(a, key)
+        if i == len(a):
+            return None
+        return i
 
     def checkClash(clashID):
         """Returns a string representing the type and ID of the clash followed by the
@@ -146,23 +146,21 @@ def main():
                     printed += "%i,%i TN %i %.3f " % (clash.res1, clash.res2, fr.frameID, fr.RMSD) + str(atoms) + "\n"
                     log(printed)
                     return Transition(clash, "TN", fr.frameID, fr.RMSD, atoms, alldists)
-        elif clashID < TtoNcount + CtoTcount:
-            # C->T: print first negative collision
-            for fr, distance, atoms in frameResults:
-                if distance > args.thres:  # no longer exists
-                    printed += "%i,%i CT %i %.3f " % (clash.res1, clash.res2, fr.frameID, fr.RMSD) + str(atoms) + "\n"
-                    log(printed)
-                    return Transition(clash, "CT", fr.frameID, fr.RMSD, atoms, alldists)
-        else:
-            # C->N: print first negative collision
-            for fr, distance, atoms in frameResults:
-                if distance > args.thres:  # no longer exists
-                    printed += "%i,%i CN %i %.3f " % (clash.res1, clash.res2, fr.frameID, fr.RMSD) + str(atoms) + "\n"
-                    log(printed)
-                    return Transition(clash, "CN", fr.frameID, fr.RMSD, atoms, alldists)
+        # elif clashID < TtoNcount + CtoTcount:
+        #     # C->T: print first negative collision
+        #     for fr, distance, atoms in frameResults:
+        #         if distance > args.thres:  # no longer exists
+        #             printed += "%i,%i CT %i %.3f " % (clash.res1, clash.res2, fr.frameID, fr.RMSD) + str(atoms) + "\n"
+        #             log(printed)
+        #             return Transition(clash, "CT", fr.frameID, fr.RMSD, atoms, alldists)
+        # else:
+        #     # C->N: print first negative collision
+        #     for fr, distance, atoms in frameResults:
+        #         if distance > args.thres:  # no longer exists
+        #             printed += "%i,%i CN %i %.3f " % (clash.res1, clash.res2, fr.frameID, fr.RMSD) + str(atoms) + "\n"
+        #             log(printed)
+        #             return Transition(clash, "CN", fr.frameID, fr.RMSD, atoms, alldists)
 
-        # alldists = [item.dist for item in frameResults][0::args.outfreq]
-        # # Determine which frame to keep
         # if clashID < TtoNcount:
         #     # T->N: get last positive collision
         #     checkList = list(reversed(map(lambda u: -u.dist, frameResults)))
@@ -173,22 +171,22 @@ def main():
         #     printed += "%i,%i TN %i %.3f " % (clash.res1, clash.res2, fr.frameID, fr.RMSD) + str(atoms) + "\n"
         #     log(printed)
         #     return Transition(clash, "TN", fr.frameID, fr.RMSD, atoms, alldists)
-        # else:
-        #     # C->T or C->N: get first negative collision
-        #     index = find_ge([fr.dist for fr in frameResults], args.thres)
-        #     if index is None:
-        #         return None
-        #     fr, distance, atoms = frameResults[index]
-        #     if clashID < TtoNcount + CtoTcount:
-        #         # C->T
-        #         printed += "%i,%i CT %i %.3f " % (clash.res1, clash.res2, fr.frameID, fr.RMSD) + str(atoms) + "\n"
-        #         log(printed)
-        #         return Transition(clash, "CT", fr.frameID, fr.RMSD, atoms, alldists)
-        #     else:
-        #         # C->N
-        #         printed += "%i,%i CN %i %.3f " % (clash.res1, clash.res2, fr.frameID, fr.RMSD) + str(atoms) + "\n"
-        #         log(printed)
-        #         return Transition(clash, "CN", fr.frameID, fr.RMSD, atoms, alldists)
+        else:
+            # C->T or C->N: get first negative collision
+            index = find_ge([fr.dist for fr in frameResults], args.thres)
+            if index is None:
+                return None
+            fr, distance, atoms = frameResults[index]
+            if clashID < TtoNcount + CtoTcount:
+                # C->T
+                printed += "%i,%i CT %i %.3f " % (clash.res1, clash.res2, fr.frameID, fr.RMSD) + str(atoms) + "\n"
+                log(printed)
+                return Transition(clash, "CT", fr.frameID, fr.RMSD, atoms, alldists)
+            else:
+                # C->N
+                printed += "%i,%i CN %i %.3f " % (clash.res1, clash.res2, fr.frameID, fr.RMSD) + str(atoms) + "\n"
+                log(printed)
+                return Transition(clash, "CN", fr.frameID, fr.RMSD, atoms, alldists)
 
     output = parMap(checkClash, range(len(clashes)), n=args.processes, silent=True)
     if None in output:
