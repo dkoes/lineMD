@@ -14,6 +14,7 @@ from operator import itemgetter
 __author__ = 'Charles Yuan'
 
 Atom = namedtuple('Atom', ['ID', 'coords'])
+Clash = namedtuple('Clash', ['res1', 'res2'])
 Point = namedtuple('Point', ['x', 'y', 'z'])
 
 
@@ -49,7 +50,7 @@ def findCombinations(pdbLines):
     # {residueID: Point, ...}
 
     # calculate possible combinations of the residue IDs
-    pairs = [pair for pair in list(combinations(residues.keys(), 2))
+    pairs = [Clash(*pair) for pair in list(combinations(residues.keys(), 2))
              if abs(pair[0] - pair[1]) > 4]  # not within 4 of each other
     return pairs
 
@@ -65,10 +66,10 @@ def findClashes(pdbLines, threshold):
 
     norm = linalg.norm
 
-    def testPair((res1, res2)):
+    def testPair(clash):
         """Returns whether the residues are in collision"""
 
-        ctr1, ctr2 = array(residueCenters[res1]), array(residueCenters[res2])
+        ctr1, ctr2 = array(residueCenters[clash.res1]), array(residueCenters[clash.res2])
         # Check centers, O(1)
         dist = norm(ctr1 - ctr2)
         if dist < threshold:
@@ -77,8 +78,8 @@ def findClashes(pdbLines, threshold):
         if dist > 20:
             return False
 
-        coords1 = [array(a.coords) for a in residues[res1]]
-        coords2 = [array(a.coords) for a in residues[res2]]
+        coords1 = [array(a.coords) for a in residues[clash.res1]]
+        coords2 = [array(a.coords) for a in residues[clash.res2]]
 
         # Check first and center of second, O(n)
         for coord1 in coords1:
@@ -110,7 +111,7 @@ def findClashes(pdbLines, threshold):
     # Print output
     for pairID, out in enumerate(output):
         if out:
-            clashes.add((min(pairs[pairID]), max(pairs[pairID])))  # (res1, res2)
+            clashes.add(Clash(min(pairs[pairID]), max(pairs[pairID])))  # (res1, res2)
 
     return clashes
 
@@ -195,10 +196,10 @@ def main():
     # Print output
     log("Found %i collisions\n" % (len(transitory) + len(conserved)))
     for clash in conserved:
-        sys.stdout.write("C %i %i\n" % (clash[0], clash[1]))
+        sys.stdout.write("C %i %i\n" % (clash.res1, clash.res2))
     sys.stdout.flush()
     for clash in transitory:
-        sys.stdout.write("T %i %i\n" % (clash[0], clash[1]))
+        sys.stdout.write("T %i %i\n" % (clash.res1, clash.res2))
     sys.stdout.flush()
 
 
