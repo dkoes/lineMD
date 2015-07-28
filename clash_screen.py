@@ -7,7 +7,8 @@ from argparse import ArgumentParser
 from collections import namedtuple
 from itertools import combinations
 from shared import *
-from numpy import array, linalg
+from math import sqrt
+from numpy import array, dot
 from operator import itemgetter
 
 
@@ -15,7 +16,6 @@ __author__ = 'Charles Yuan'
 
 Atom = namedtuple('Atom', ['ID', 'coords'])
 Clash = namedtuple('Clash', ['res1', 'res2'])
-Point = namedtuple('Point', ['x', 'y', 'z'])
 
 
 def findCombinations(pdbLines):
@@ -36,13 +36,13 @@ def findCombinations(pdbLines):
             # residue has not been previously seen
             residues[residueID] = []
         atomID = int(vals[1])
-        atomCoords = Point(*[float(line[(30 + i * 8):(38 + i * 8)]) for i in range(3)])
+        atomCoords = array([float(line[(30 + i * 8):(38 + i * 8)]) for i in range(3)])
         residues[residueID].append(Atom(atomID, atomCoords))
 
     def center(ps):
         """Find the center of a collection of points"""
         size = float(len(ps))
-        return Point(sum(p.x for p in ps) / size, sum(p.y for p in ps) / size, sum(p.z for p in ps) / size)
+        return array((sum(p[0] for p in ps) / size, sum(p[1] for p in ps) / size, sum(p[2] for p in ps) / size))
 
     # global database of residue center locations
     global residueCenters
@@ -64,43 +64,26 @@ def findClashes(pdbLines, threshold):
     totalChecks = len(pairs)
     log("Total of %i residues, %i possible combinations\n" % (len(residues.keys()), totalChecks))
 
-    norm = linalg.norm
-
     def testPair(clash):
         """Returns whether the residues are in collision"""
 
-        ctr1, ctr2 = array(residueCenters[clash.res1]), array(residueCenters[clash.res2])
-        # Check centers, O(1)
-        dist = norm(ctr1 - ctr2)
+        # Check centers
+        diff = array(residueCenters[clash[0]]) - array(residueCenters[clash[1]])  # Access as tuple
+        dist = sqrt(dot(diff, diff))
         if dist < threshold:
             return True
         # Reject if ridiculously far, 20 angstroms compared to 6 for arginine "radius"
         if dist > 20:
             return False
 
-        coords1 = [array(a.coords) for a in residues[clash.res1]]
-        coords2 = [array(a.coords) for a in residues[clash.res2]]
-
-        # Check first and center of second, O(n)
-        for coord1 in coords1:
-            dist = norm(coord1 - ctr2)
-            if dist < threshold:
-                return True
-
-        # Check second and center of first, O(n)
-        for coord2 in coords2:
-            dist = norm(coord2 - ctr1)
-            if dist < threshold:
-                return True
-
-        # Centers already do not match, so check extremes first: descending sort by distance to center
-        coords1 = sorted(coords1, key=lambda c: linalg.norm(ctr1 - c), reverse=True)
-        coords2 = sorted(coords2, key=lambda c: linalg.norm(ctr2 - c), reverse=True)
-
-        # Check both, O(n^2)
+        # Access as tuple
+        coords1 = [a[1] for a in residues[clash[0]]]
+        coords2 = [a[1] for a in residues[clash[1]]]
+        # Check both
         for coord1 in coords1:
             for coord2 in coords2:
-                dist = norm(coord1 - coord2)
+                diff = coord1 - coord2
+                dist = sqrt(dot(diff, diff))
                 if dist < threshold:
                     return True
         return False
