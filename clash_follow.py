@@ -83,12 +83,12 @@ def main():
     # Find distances for each collision at different frames
     # Iterate over the frames to read residues
     log("Reading frame data.\n")
-    frameResData = {}  # {frameID: residues, ...}
+    frameResData = {}  # {Frame: residues, ...}
     resNames = {}
 
-    for count, (ID, frameDist) in enumerate(frameList):
+    for count, frame in enumerate(frameList):
         log("\rFrame %i of %i" % (count + 1, totalFrames))
-        with open(FRAMESPATH + "/%i.pdb" % ID) as pdb:
+        with open(FRAMESPATH + "/%i.pdb" % frame.frameID) as pdb:
             # Read frame file into the residues dictionary
             residues = {}  # {residueID: [Atom, ...], ...}
             for line in pdb:
@@ -104,13 +104,13 @@ def main():
                 if resID not in resNames or resNames[resID] is None:
                     resNames[resID] = resName
                 residues[resID].append(Atom(atomID, atomCoords))
-            frameResData[count] = ID, residues
+            frameResData[frame] = residues
     log("\n")
     # Iterate over the collisions to check each frame
     log("Checking collisions.\n")
 
     def find_ge(a, key):
-        """Find index of smallest item greater than or equal to key. Returns None if not found."""
+        """Find index, in sorted list, of first item greater than or equal to key. Returns None if not found."""
         i = bisect_left(a, key)
         if i == len(a):
             return None
@@ -122,53 +122,51 @@ def main():
         printed = "Transition %i of %i " % (clashID + 1, totalClashes)
         clash = clashes[clashID]
         # Iterate over each stored frame
-        frameResults = []  # [(frameID, dist, atoms), ...]
-        FrameResult = namedtuple('FrameResult', ['frameID', 'dist', 'atoms'])
-        for frameCount, (frameID, frameResidues) in frameResData.iteritems():
+        frameResults = []  # [(frame, dist, atoms), ...]
+        FrameResult = namedtuple('FrameResult', ['frame', 'dist', 'atoms'])
+        for fr, frResidues in frameResData.iteritems():
             # find minimum distance between residues
             minDist = sys.maxint
             minAtoms = (0, 0)
-            for a1, coord1 in frameResidues[clash.res1]:
-                for a2, coord2 in frameResidues[clash.res2]:
+            for a1, coord1 in frResidues[clash.res1]:
+                for a2, coord2 in frResidues[clash.res2]:
                     thisDist = linalg.norm(abs(array(coord1) - array(coord2)))
                     if thisDist < minDist:
                         minDist = thisDist
                         minAtoms = a1, a2
             # Add the minimum distance for this clash
-            frameResults.append(FrameResult(frameID, minDist, minAtoms))
+            frameResults.append(FrameResult(fr, minDist, minAtoms))
 
+        alldists = [item.dist for item in frameResults][0::args.outfreq]
         # Determine which frame to keep
         if clashID < TtoNcount:
             # T->N: get last positive collision
-            for frameID, distance, atoms in reversed(frameResults):  # go backwards
-                if distance < args.thres:  # clash exists
-                    frameRMSD = frameList[frameID].RMSD
-                    printed += "%i,%i TN %i %.3f " % (clash.res1, clash.res2, frameID, frameRMSD) + str(atoms) + "\n"
-                    log(printed)
-                    alldists = [item.dist for item in frameResults][0::args.outfreq]
-                    return Transition(clash, "TN", frameID, frameRMSD, atoms, alldists)
+            checkList = list(reversed(map(lambda u: -u.dist, frameResults)))
+            index = find_ge(checkList, -args.thres)
+            if index is None:
+                return None
+            fr, distance, atoms = frameResults[len(frameResults) - index - 1]
+            printed += "%i,%i TN %i %.3f " % (clash.res1, clash.res2, fr.frameID, fr.RMSD) + str(atoms) + "\n"
+            log(printed)
+            return Transition(clash, "TN", fr.frameID, fr.RMSD, atoms, alldists)
         else:
             # C->T or C->N: get first negative collision
             index = find_ge([fr.dist for fr in frameResults], args.thres)
             if index is None:
                 return None
-            frameID, distance, atoms = frameResults[index]
-            frameRMSD = frameList[index].RMSD
+            fr, distance, atoms = frameResults[index]
             if clashID < TtoNcount + CtoTcount:
                 # C->T
-                printed += "%i,%i CT %i %.3f " % (clash.res1, clash.res2, frameID, frameRMSD) + str(atoms) + "\n"
+                printed += "%i,%i CT %i %.3f " % (clash.res1, clash.res2, fr.frameID, fr.RMSD) + str(atoms) + "\n"
                 log(printed)
-                alldists = [item.dist for item in frameResults][0::args.outfreq]
-                return Transition(clash, "CT", frameID, frameRMSD, atoms, alldists)
+                return Transition(clash, "CT", fr.frameID, fr.RMSD, atoms, alldists)
             else:
                 # C->N
-                printed += "%i,%i CN %i %.3f " % (clash.res1, clash.res2, frameID, frameRMSD) + str(atoms) + "\n"
+                printed += "%i,%i CN %i %.3f " % (clash.res1, clash.res2, fr.frameID, fr.RMSD) + str(atoms) + "\n"
                 log(printed)
-                alldists = [item.dist for item in frameResults][0::args.outfreq]
-                return Transition(clash, "CN", frameID, frameRMSD, atoms, alldists)
+                return Transition(clash, "CN", fr.frameID, fr.RMSD, atoms, alldists)
 
-    r = range(len(clashes))
-    output = parMap(checkClash, r, n=args.processes, silent=True)
+    output = parMap(checkClash, range(len(clashes)), n=args.processes, silent=True)
     if None in output:
         log(YELLOW + UNDERLINE + "Warning:" + END
             + " %i transitions not found in frames. --freq may have changed from clash_check"
