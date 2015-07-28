@@ -65,7 +65,7 @@ def main():
 
     # Read the distance file
     with open(DISTPATH) as distFile:
-        frames = [Frame((int(line.split()[0]), float(line.split()[1]))) for line in distFile]
+        frames = [Frame(int(line.split()[0]), float(line.split()[1])) for line in distFile]
 
     if not args.check_all:
         frameList = selectFrames(frames, MIN, MAX, args.freq)
