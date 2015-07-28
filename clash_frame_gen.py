@@ -62,7 +62,7 @@ def main():
     # read all runs in the directory
     runs = []  # [(runPath, dist), ...]
     for runPath in glob(LINEPATH + "/C*_*/R*"):
-        with open(runPath + "/run_info", 'r') as runInfo:
+        with open(runPath + "/run_info") as runInfo:
             runs.append((runPath, float(runInfo.readlines()[1].split()[1])))
     runs.sort(key=itemgetter(1))
     runs.reverse()  # RMSD is high-to-low
@@ -95,8 +95,8 @@ def main():
     # Calculate distances and write dist file
     dists = []  # [(frameID, dist)...]
     # Read existing lines in the dist file and sort them
-    with open(DISTPATH, 'r') as distFile:
-        for line in distFile.readlines():
+    with open(DISTPATH) as distFile:
+        for line in distFile:
             # read ID, dist
             dists.append((int(line.split()[0]), float(line.split()[1])))
         dists.sort(key=itemgetter(1))

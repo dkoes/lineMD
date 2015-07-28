@@ -4,9 +4,7 @@
 
 from __future__ import division, print_function
 from argparse import ArgumentParser
-from clash_screen import findClashes
 from shared import *
-from operator import itemgetter
 
 __author__ = 'Charles Yuan'
 

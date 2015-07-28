@@ -151,7 +151,7 @@ def calcRefCoords():
     global REFCOORDS
     global SEGMENTS
     pdbLines = []
-    with open(REFPATH, 'r') as pdb:
+    with open(REFPATH) as pdb:
         if SEGMENTS is None:  # Process everything
             for pdbLine in pdb:
                 # Skip non ATOM lines and non-alpha carbons
@@ -189,7 +189,7 @@ def generatePDBs():
     trajout frame_%i.pdb pdb
     """ % (PRMTOPPATH, COORDPATH, frame, frame, frame))
             system("cpptraj < frame_%i.in > /dev/null 2> /dev/null" % frame)
-            with open("frame_%i.pdb" % frame, 'r') as pdb:
+            with open("frame_%i.pdb" % frame) as pdb:
                 thisDist = rmsdDist(pdbLines=pdb.readlines(),
                                     refCoords=REFCOORDS, segments=SEGMENTS)
                 log("Frame %i has dist %.3f\n" % (frame, thisDist))
