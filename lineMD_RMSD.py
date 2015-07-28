@@ -405,7 +405,7 @@ class Run(object):
             else:
                 fail(RED + UNDERLINE + "Error:" + END + RED + " run at %s has no run_info.\n" % r.path + END)
         new.create(endRestart=endRestart, info=info, coord=coord, outFile=outFile, inFile=inFile,
-                   beginRestart=beginRestart, initial=False)
+                   beginRestart=beginRestart)
         # Delete the old run
         r.delete(trash=False)
         # Change Cluster object data
@@ -452,14 +452,14 @@ class Run(object):
             global PRMTOPPATH
 
             if self._clusterID == '0_0' and self._ID == 0:  # This is initial, skip all that stuff
-                with open(self.path + "/frame_0.pdb", 'r') as pdb:
+                with open(self.path + "/frame_0.pdb") as pdb:
                     self._dist = rmsdDist(pdbLines=pdb.readlines(), refCoords=REFCOORDS, segments=SEGMENTS)
                 self.writeInfo()
                 return self._dist, 0
 
             else:  # This is not initial
                 def getDist(fr):
-                    with open(self.path + "/frame_%i.pdb" % fr, 'r') as thisPDB:
+                    with open(self.path + "/frame_%i.pdb" % fr) as thisPDB:
                         dist = rmsdDist(pdbLines=thisPDB.readlines(), refCoords=REFCOORDS, segments=SEGMENTS)
                     return fr, dist
 
@@ -636,7 +636,7 @@ Frame: %i
         """Read a run_info file for a run."""
         try:
             info = []
-            with open(self.path + "/run_info", 'r') as runInfo:
+            with open(self.path + "/run_info") as runInfo:
                 for line in runInfo:
                     info.append(line.split()[1])
                 self._UID = int(info[0])
@@ -813,7 +813,7 @@ class Cluster(object):
             return
         try:
             info = []
-            with open(self.path + "/cluster_info", 'r') as clusterInfo:
+            with open(self.path + "/cluster_info") as clusterInfo:
                 for line in clusterInfo:
                     info.append(line.split()[1])
                 self._dist = float(info[0])
@@ -857,7 +857,7 @@ def init():
     CLUSTERS['0_0'] = Cluster(ID='0_0', runs={})  # do not know distance yet
     CLUSTERS['0_0'].create()
 
-    initRun = Run(ID=0, clusterID='0_0', previous="initial", UID=Run.getNextUID())
+    initRun = Run(previous="initial", UID=Run.getNextUID())
     CLUSTERS['0_0'].addRun(ID=0, run=initRun)
     initRun.create(endRestart=COORDPATH, initial=True)
     if not initRun.check("end.rst.gz"):
@@ -899,7 +899,7 @@ def calcRefCoords():
     global REFCOORDS
     global SEGMENTS
     pdbLines = []
-    with open(WORKDIR + "/reference.pdb", 'r') as pdb:
+    with open(WORKDIR + "/reference.pdb") as pdb:
         if SEGMENTS is None:  # Process everything
             for pdbLine in pdb:
                 # Skip non ATOM lines and non-alpha carbons
@@ -1005,7 +1005,7 @@ def readClusterInfo(silent=False, readInfo=True, readRuns=True, readExplored=Tru
     # lastID = None
     exploredDist = []
     if readExplored:
-        with open(WORKDIR + "/explored_dist", 'r') as exploredDistFile:
+        with open(WORKDIR + "/explored_dist") as exploredDistFile:
             for line in exploredDistFile:
                 exploredDist.append(float(line))
         exploredDist.sort(reverse=True)
@@ -1026,7 +1026,7 @@ def readClusterInfo(silent=False, readInfo=True, readRuns=True, readExplored=Tru
         percentage = float(index) / desiredCluster * 100
         if percentage > 100.0:
             percentage = 100.0
-        log("\rReading clusters: %.1f%% complete." % percentage, toFile=False)
+        log("\rReading clusters: %.1f%% complete." % percentage)
     log("\n")
     if not silent:  # print cluster information
         if readInfo:
@@ -1071,7 +1071,7 @@ def migrateRuns(runDirectories, oldCluster):
         if oldCluster.ID == 'R':  # expect a decompressed file
             outFiles = glob(run.path + "/lineMD_R*.o*")
             if outFiles:
-                with open(outFiles[0], 'r') as output:
+                with open(outFiles[0]) as output:
                     out = output.read()
                     if "Calculation halted" in out or "unspecified launch failure" in out \
                             or "busy or unavailable" in out or "STOP PMEMD Terminated Abnormally" in out:
@@ -1241,7 +1241,7 @@ def findNewRuns():
             nextNum = max(runningDirectories) + 1
 
         newRun = Run(ID=nextNum, clusterID='R', previous=selRun.UID, UID=Run.getNextUID())
-        newRun.create(beginRestart=selRun.path + "/end.rst.gz", initial=False)
+        newRun.create(beginRestart=selRun.path + "/end.rst.gz")
         selRun.explored += 1
         selRun.writeInfo()
         newRun.execute()
