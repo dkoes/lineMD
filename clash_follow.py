@@ -297,7 +297,8 @@ def parse():
     parser.add_argument("--freq", help="only keep every n frames (default is 1 for all frames)",
                         type=int, default=1)
     parser.add_argument("--outfreq", help="same as freq, but for distance output", type=int, default=1)
-    parser.add_argument("--max_plot", help="maximum number of collisions per plot", type=int, default=sys.maxint)
+    parser.add_argument("--max_plot", help="maximum number of collisions per plot (default is 10)",
+                        type=int, default=10)
     parser.add_argument('-t', "--thres", help="collision threshold in angstroms (default is 4)",
                         type=float, default=4.)
     parser.add_argument("--minthres", help="separate collisions that never go above this distance (default is 10)",
