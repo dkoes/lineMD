@@ -110,10 +110,8 @@ def main():
     log("Checking collisions.\n")
 
     def find_ge(a, key):
-        """Find index of smallest item greater than or equal to key."""
+        """Find index of smallest item greater than or equal to key. Returns maximum index if not found."""
         i = bisect_left(a, key)
-        if i == len(a):
-            return None
         return i
 
     def checkClash(clashID):
