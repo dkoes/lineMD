@@ -105,7 +105,7 @@ def findClashes(pdbLines, threshold):
         return False
 
     # Run testPairs for each combination of residues in parallel
-    output = parMap(testPair, pairs, n=args.processes)
+    output = parMap(testPair, pairs, n=args.processes, silent=True)
 
     # Print output
     for pairID, out in enumerate(output):
