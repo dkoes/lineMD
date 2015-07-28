@@ -112,7 +112,7 @@ def main():
     def find_ge(a, key):
         """Find index of smallest item greater than or equal to key. Returns maximum index if not found."""
         i = bisect_left(a, key)
-        return i
+        return min(i, len(a) - 1)
 
     def checkClash(clashID):
         """Returns a string representing the type and ID of the clash followed by the
