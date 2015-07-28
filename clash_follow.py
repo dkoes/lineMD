@@ -136,7 +136,7 @@ def main():
                     frameRMSD = next(x.RMSD for x in frameList if x.frameID == frameID)
                     printed += "%i,%i TN %i %.3f " % (clash.res1, clash.res2, frameID, frameRMSD) + str(atoms) + "\n"
                     log(printed)
-                    alldists = [item.minDist for item in frameResults][0::args.outfreq]
+                    alldists = [item.dist for item in frameResults][0::args.outfreq]
                     # eliminate it if it does not meet the max threshold at all
                     return Transition(clash, "TN", frameID, frameRMSD, atoms, alldists)
         elif clashID < TtoNcount + CtoTcount:
@@ -146,7 +146,7 @@ def main():
                     frameRMSD = next(x.RMSD for x in frameList if x.frameID == frameID)
                     printed += "%i,%i CT %i %.3f " % (clash.res1, clash.res2, frameID, frameRMSD) + str(atoms) + "\n"
                     log(printed)
-                    alldists = [item.minDist for item in frameResults][0::args.outfreq]
+                    alldists = [item.dist for item in frameResults][0::args.outfreq]
                     return Transition(clash, "CT", frameID, frameRMSD, atoms, alldists)
         else:
             # C->N: print first negative collision
@@ -155,7 +155,7 @@ def main():
                     frameRMSD = next(x.RMSD for x in frameList if x.frameID == frameID)
                     printed += "%i,%i CN %i %.3f " % (clash.res1, clash.res2, frameID, frameRMSD) + str(atoms) + "\n"
                     log(printed)
-                    alldists = [item.minDist for item in frameResults][0::args.outfreq]
+                    alldists = [item.dist for item in frameResults][0::args.outfreq]
                     return Transition(clash, "CN", frameID, frameRMSD, atoms, alldists)
 
     r = range(len(clashes))
