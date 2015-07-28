@@ -453,14 +453,14 @@ class Run(object):
 
             if self._clusterID == '0_0' and self._ID == 0:  # This is initial, skip all that stuff
                 with open(self.path + "/frame_0.pdb") as pdb:
-                    self._dist = rmsdDist(pdbLines=pdb.readlines(), refCoords=REFCOORDS, segments=SEGMENTS)
+                    self._dist = rmsdDist(pdbLines=list(pdb), refCoords=REFCOORDS, segments=SEGMENTS)
                 self.writeInfo()
                 return self._dist, 0
 
             else:  # This is not initial
                 def getDist(fr):
                     with open(self.path + "/frame_%i.pdb" % fr) as thisPDB:
-                        dist = rmsdDist(pdbLines=thisPDB.readlines(), refCoords=REFCOORDS, segments=SEGMENTS)
+                        dist = rmsdDist(pdbLines=list(thisPDB), refCoords=REFCOORDS, segments=SEGMENTS)
                     return fr, dist
 
                 with directory(self.path):

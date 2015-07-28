@@ -436,14 +436,14 @@ class Run(object):
 
             if self._clusterID == '0_0' and self._ID == 0:  # This is initial, skip all that stuff
                 with open(self.path + "/frame_0.pdb") as pdb:
-                    self._dist = atomDist(pdb.readlines(), LIGANDATOM, PROTEINATOM)
+                    self._dist = atomDist(list(pdb), LIGANDATOM, PROTEINATOM)
                 self.writeInfo()
                 return self._dist, 0
 
             else:  # This is not initial
                 def getDist(fr):
                     with open(self.path + "/frame_%i.pdb" % fr) as thisPDB:
-                        dist = atomDist(thisPDB.readlines(), LIGANDATOM, PROTEINATOM)
+                        dist = atomDist(list(thisPDB), LIGANDATOM, PROTEINATOM)
                     return fr, dist
 
                 with directory(self.path):
@@ -914,7 +914,7 @@ trajout frame_0.pdb pdb
 
         with open(WORKDIR + "/C0_0/R0/frame_0.pdb") as p:
             LIGANDATOM, PROTEINATOM, ligandAtomCoord, proteinAtomCoord, ligandCenter, proteinCenter = \
-                calcCenterAtoms(p.readlines())
+                calcCenterAtoms(list(p))
         log("Selected ligand center atom ID " + MAGENTA + "%i" % LIGANDATOM + END +
             " at (%.3f, %.3f, %.3f), " % (ligandAtomCoord[0], ligandAtomCoord[1], ligandAtomCoord[2]) +
             "closest to (%.3f, %.3f, %.3f).\n" % (ligandCenter[0], ligandCenter[1], ligandCenter[2]))

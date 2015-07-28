@@ -208,9 +208,9 @@ def calcDists():
     global TOTALFRAMES
     os.chdir(OUTPATH)
 
-    with open(OUTPATH + "/initial.pdb", 'r') as p:
+    with open(OUTPATH + "/initial.pdb") as p:
         LIGANDATOM, PROTEINATOM, lAtomCoord, pAtomCoord, lCenter, pCenter = \
-            calcCenterAtoms(p.readlines())
+            calcCenterAtoms(list(p))
     log("Selected ligand center atom ID " + MAGENTA + "%i" % LIGANDATOM + END +
         " at (%.3f, %.3f, %.3f), " % (lAtomCoord[0], lAtomCoord[1], lAtomCoord[2]) +
         "closest to (%.3f, %.3f, %.3f).\n" % (lCenter[0], lCenter[1], lCenter[2]))
@@ -220,8 +220,8 @@ def calcDists():
 
     def calcDist(frame):
         """Calculate the distance for a certain frame. Returns (frame, distance)."""
-        with open("frame_%i.pdb" % frame, 'r') as pdb:
-            dist = atomDist(pdb.readlines(), LIGANDATOM, PROTEINATOM)
+        with open("frame_%i.pdb" % frame) as pdb:
+            dist = atomDist(list(pdb), LIGANDATOM, PROTEINATOM)
         log("Frame %i has distance %.3f\n" % (frame, dist))
         return frame, dist
 

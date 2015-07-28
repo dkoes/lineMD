@@ -31,14 +31,14 @@ def main():
     second_transitory = []
     second_conserved = []
     with open(FIRSTPATH) as first:
-        for line in first.readlines():
+        for line in first:
             resids = (int(line.split()[1]), int(line.split()[2]))
             if line.startswith("C"):
                 first_conserved.append(resids)
             else:  # line.startswith("T")
                 first_transitory.append(resids)
     with open(SECONDPATH) as second:
-        for line in second.readlines():
+        for line in second:
             resids = (int(line.split()[1]), int(line.split()[2]))
             if line.startswith("C"):
                 second_conserved.append(resids)

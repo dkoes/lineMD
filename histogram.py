@@ -55,8 +55,8 @@ def main():
     # Input data
     # inputList: [value1, value2, ...]
     inputList = []
-    with open(args.file, 'r') as theFile:
-        for line in theFile.readlines():
+    with open(args.file) as theFile:
+        for line in theFile:
                 # Import data into table
             if not line.startswith("#"):
                 try:

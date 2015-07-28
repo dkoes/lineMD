@@ -63,7 +63,7 @@ def main():
     runs = []  # [(runPath, dist), ...]
     for runPath in glob(LINEPATH + "/C*_*/R*"):
         with open(runPath + "/run_info") as runInfo:
-            runs.append((runPath, float(runInfo.readlines()[1].split()[1])))
+            runs.append((runPath, float(list(runInfo)[1].split()[1])))
     runs.sort(key=itemgetter(1))
     runs.reverse()  # RMSD is high-to-low
 
