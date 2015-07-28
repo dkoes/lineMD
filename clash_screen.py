@@ -162,7 +162,7 @@ def main():
         DISTPATH = args.dist
 
     # Read the distance file
-    with open(DISTPATH, 'r') as distFile:
+    with open(DISTPATH) as distFile:
         frames = [(int(line.split()[0]), float(line.split()[1])) for line in distFile]
 
     frameList = selectFrames(frames, MIN, MAX, args.freq)
@@ -175,7 +175,7 @@ def main():
     # Find the collisions in each frame and add them to the sets
     for i, frame in enumerate(frameList):
         log("Frame %i of %i\n" % (i + 1, totalFrames))
-        with open(FRAMESPATH + "/%i.pdb" % frame[0], 'r') as pdb:
+        with open(FRAMESPATH + "/%i.pdb" % frame[0]) as pdb:
             clashes = findClashes(list(pdb), args.thres)
         inSome = inSome.union(set(clashes))
         if first:

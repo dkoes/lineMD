@@ -4,10 +4,17 @@
 
 from argparse import ArgumentParser
 from numpy import linalg, array
+from collections import namedtuple
 from clash_screen import selectFrames
 from shared import *
 
 __author__ = 'Charles'
+
+Atom = namedtuple('Atom', ['ID', 'coords'])
+Point = namedtuple('Point', ['x', 'y', 'z'])
+Clash = namedtuple('Clash', ['res1', 'res2'])
+Frame = namedtuple('Frame', ['frameID', 'RMSD'])
+Transition = namedtuple('Transition', ['clash', 'type', 'frameID', 'RMSD', 'atoms', 'dists'])
 
 
 def main():
@@ -44,20 +51,21 @@ def main():
 
     # Establish sets of collisions per type and read data
     TtoN, CtoT, CtoN = set(), set(), set()
-    with open(COLLISIONSPATH, 'r') as collisionsFile:
-        for line in collisionsFile.readlines():
-            t = (int(line.split()[1]), int(line.split()[2]))
+    with open(COLLISIONSPATH) as collisionsFile:
+        for line in collisionsFile:
+            l = line.split()
+            t = (int(l[1]), int(l[2]))
             if line.startswith("TN"):
-                TtoN.add((min(t[0], t[1]), max(t[0], t[1])))
+                TtoN.add(Clash(min(t), max(t)))
             elif line.startswith("CT"):
-                CtoT.add((min(t[0], t[1]), max(t[0], t[1])))
+                CtoT.add(Clash(min(t), max(t)))
             elif line.startswith("CN"):
-                CtoN.add((min(t[0], t[1]), max(t[0], t[1])))
-    TtoN, CtoT, CtoN = [sorted(list(s), key=lambda x: (x[0], x[1])) for s in (TtoN, CtoT, CtoN)]
+                CtoN.add(Clash(min(t), max(t)))
+    TtoN, CtoT, CtoN = [sorted(list(s), key=lambda x: (x.res1, x.res2)) for s in (TtoN, CtoT, CtoN)]
 
     # Read the distance file
-    with open(DISTPATH, 'r') as distFile:
-        frames = [(int(line.split()[0]), float(line.split()[1])) for line in distFile.readlines()]
+    with open(DISTPATH) as distFile:
+        frames = [Frame((int(line.split()[0]), float(line.split()[1]))) for line in distFile]
 
     if not args.check_all:
         frameList = selectFrames(frames, MIN, MAX, args.freq)
@@ -79,10 +87,10 @@ def main():
 
     for count, (ID, frameDist) in enumerate(frameList):
         log("\rFrame %i of %i" % (count + 1, totalFrames))
-        with open(FRAMESPATH + "/%i.pdb" % ID, 'r') as pdb:
+        with open(FRAMESPATH + "/%i.pdb" % ID) as pdb:
             # Read frame file into the residues dictionary
-            residues = {}  # {residueID: [(atomID, atomCoords)]}
-            for line in pdb.readlines():
+            residues = {}  # {residueID: [Atom, ...], ...}
+            for line in pdb:
                 if line[0:4] != "ATOM" or line[17:20] not in RESIDUES:
                     continue
                 vals = line.split()
@@ -90,11 +98,11 @@ def main():
                 atomID = int(vals[1])
                 if resID not in residues or residues[resID] is None:
                     residues[resID] = []
-                atomCoords = [float(line[(30 + f * 8):(38 + f * 8)]) for f in range(3)]
+                atomCoords = Point(*[float(line[(30 + f * 8):(38 + f * 8)]) for f in range(3)])
                 resName = vals[3]  # three-letter name of residue
                 if resID not in resNames or resNames[resID] is None:
                     resNames[resID] = resName
-                residues[resID].append((atomID, atomCoords))
+                residues[resID].append(Atom(atomID, atomCoords))
             frameResData[count] = ID, residues
     log("\n")
     # Iterate over the collisions to check each frame
@@ -107,50 +115,51 @@ def main():
         clash = clashes[clashID]
         # Iterate over each stored frame
         frameResults = []  # [(frameID, dist, atoms), ...]
+        FrameResult = namedtuple('FrameResult', ['frameID', 'dist', 'atoms'])
         for frameCount, (frameID, frameResidues) in frameResData.iteritems():
             # find minimum distance between residues
             minDist = sys.maxint
             minAtoms = (0, 0)
-            for a1, coord1 in frameResidues[clash[0]]:
-                for a2, coord2 in frameResidues[clash[1]]:
+            for a1, coord1 in frameResidues[clash.res1]:
+                for a2, coord2 in frameResidues[clash.res2]:
                     thisDist = linalg.norm(abs(array(coord1) - array(coord2)))
                     if thisDist < minDist:
                         minDist = thisDist
                         minAtoms = a1, a2
             # Add the minimum distance for this clash
-            frameResults.append((frameID, minDist, minAtoms))
+            frameResults.append(FrameResult(frameID, minDist, minAtoms))
         # Determine which frame to keep
         if clashID < TtoNcount:
             # T->N: print last positive collision
             for frameID, distance, atoms in reversed(frameResults):  # go backwards
                 if distance < args.thres:  # clash exists
-                    frameRMSD = next(x[1] for x in frameList if x[0] == frameID)
-                    printed += str(clash) + " TN %i %.3f " % (frameID, frameRMSD) + str(atoms) + "\n"
+                    frameRMSD = next(x.RMSD for x in frameList if x.frameID == frameID)
+                    printed += "%i,%i TN %i %.3f " % (clash.res1, clash.res2, frameID, frameRMSD) + str(atoms) + "\n"
                     log(printed)
-                    alldists = [item[1] for item in frameResults][0::args.outfreq]
+                    alldists = [item.minDist for item in frameResults][0::args.outfreq]
                     # eliminate it if it does not meet the max threshold at all
-                    return clash, "TN", frameID, frameRMSD, atoms, alldists
+                    return Transition(clash, "TN", frameID, frameRMSD, atoms, alldists)
         elif clashID < TtoNcount + CtoTcount:
             # C->T: print first negative collision
             for frameID, distance, atoms in frameResults:
                 if distance > args.thres:  # no longer exists
-                    frameRMSD = next(x[1] for x in frameList if x[0] == frameID)
-                    printed += str(clash) + " CT %i %.3f " % (frameID, frameRMSD) + str(atoms) + "\n"
+                    frameRMSD = next(x.RMSD for x in frameList if x.frameID == frameID)
+                    printed += "%i,%i CT %i %.3f " % (clash.res1, clash.res2, frameID, frameRMSD) + str(atoms) + "\n"
                     log(printed)
-                    alldists = [item[1] for item in frameResults][0::args.outfreq]
-                    return clash, "CT", frameID, frameRMSD, atoms, alldists
+                    alldists = [item.minDist for item in frameResults][0::args.outfreq]
+                    return Transition(clash, "CT", frameID, frameRMSD, atoms, alldists)
         else:
             # C->N: print first negative collision
             for frameID, distance, atoms in frameResults:
                 if distance > args.thres:  # no longer exists
-                    frameRMSD = next(x[1] for x in frameList if x[0] == frameID)
-                    printed += str(clash) + " CN %i %.3f " % (frameID, frameRMSD) + str(atoms) + "\n"
+                    frameRMSD = next(x.RMSD for x in frameList if x.frameID == frameID)
+                    printed += "%i,%i CN %i %.3f " % (clash.res1, clash.res2, frameID, frameRMSD) + str(atoms) + "\n"
                     log(printed)
-                    alldists = [item[1] for item in frameResults][0::args.outfreq]
-                    return clash, "CN", frameID, frameRMSD, atoms, alldists
+                    alldists = [item.minDist for item in frameResults][0::args.outfreq]
+                    return Transition(clash, "CN", frameID, frameRMSD, atoms, alldists)
 
     r = range(len(clashes))
-    output = parMap(checkClash, r, n=(cpu_count() / 2), silent=True)
+    output = parMap(checkClash, r, n=args.processes, silent=True)
     if None in output:
         log(YELLOW + UNDERLINE + "Warning:" + END
             + " %i transitions not found in frames. --freq may have changed from clash_check"
@@ -159,9 +168,9 @@ def main():
 
     # write output
     # sort by type, then by RMSD, then by frameID, then by clash
-    # output is clash, type, ID, RMSD, atoms, dists
 
-    out = sorted([section for section in output if section is not None], key=lambda j: (j[1], j[3], j[2], j[0]))
+    out = sorted([section for section in output if section is not None],
+                 key=lambda j: (j.type, j.RMSD, j.frameID, j.clash))
     sys.stdout.write("# type resname1 res1 atom1 resname2 res2 atom2 frameID RMSD\n")
     sys.stdout.flush()
     for (res1, res2), clashType, ID, RMSD, (atom1, atom2), dists in out:
@@ -183,12 +192,11 @@ def main():
             return tl, fl
 
         # Separate based on type and whether it exceeds the minimum threshold at max distance
-        (CNlow, CN), (CTlow, CT), (TNlow, TN) = [partition(lambda v: max(v[5]) < args.minthres,
-                                                           [o for o in out if o[1] == y]) for y in ("CN", "CT", "TN")]
+        (CNlow, CN), (CTlow, CT), (TNlow, TN) = [partition(lambda v: max(v.dists) < args.minthres,
+                                                           [o for o in out if o.type == y]) for y in ("CN", "CT", "TN")]
 
         # Sort based on final distance
-        # clash[5] is dists, clash[5][-1] is final dist
-        (CNlow, CN, CTlow, CT, TNlow, TN) = [sorted(q, key=lambda e: e[-1][-1], reverse=True) for q in
+        (CNlow, CN, CTlow, CT, TNlow, TN) = [sorted(q, key=lambda e: e.dists[-1], reverse=True) for q in
                                              (CNlow, CN, CTlow, CT, TNlow, TN)]
 
         plotArguments = ((out, "", "All"),
@@ -197,12 +205,12 @@ def main():
                          (TN, "TN", "Transitory to nonexistent"), (TNlow, "TNlow", "Transitory to nonexistent (low)"))
         plotArguments = [t for t in plotArguments if len(t[0]) > 0]  # exclude empty categories
 
-        def chunks(q, k):
-            """Yield successive k-sized chunks from q."""
-            for p in xrange(0, len(q), k):
-                yield q[p:p + k]
+        def chunks(e, k):
+            """Yield successive k-sized chunks from e."""
+            for p in xrange(0, len(e), k):
+                yield e[p:p + k]
 
-        maxDist = int(5 * round(float(max([max(o[5]) for o in out])) / 5))  # maximum reached distance rounded to 5
+        maxDist = int(5 * round(float(max([max(o.dists) for o in out])) / 5))  # maximum reached distance rounded to 5
 
         for l, name, fullName in plotArguments:
             # Write gnuplot data
@@ -212,8 +220,8 @@ def main():
                 for (res1, res2), clashType, ID, RMSD, ato, dists in l:
                     plot.write("%i/%i " % (res1, res2))
                 plot.write("\n")
-                for frame in xrange(len(l[0][5])):  # number of frames
-                    plot.write("%.3f " % frameList[frame][1])
+                for frame in xrange(len(l[0].dists)):  # number of frames
+                    plot.write("%.3f " % frameList[frame].RMSD)
                     for res, clashType, ID, RMSD, ato, dists in l:
                         plot.write("%.3f " % dists[frame])
                     plot.write("\n")
@@ -245,10 +253,10 @@ set xlabel 'RMSD (angstroms)'
 set yrange [0:%i]
 set xrange [0:*] reverse
 """ % maxDist)
-                    if MIN is not None and MIN > frameList[-1][1]:
+                    if MIN is not None and MIN > frameList[-1].RMSD:
                         gnuplot.write("""set arrow from %i,0 to %i,%i nohead lc rgb 'black'
 """ % (MIN, MIN, maxDist))
-                    if MAX is not None and MAX < frameList[0][1]:
+                    if MAX is not None and MAX < frameList[0].RMSD:
                         gnuplot.write("""set arrow from %i,0 to %i,%i nohead lc rgb 'black'
 """ % (MAX, MAX, maxDist))
                     gnuplot.write("""plot '%s' using 1:%i w l, """ % (args.plotfile + name, lastID + 2))
@@ -290,6 +298,8 @@ def parse():
     parser.add_argument('-c', "--collisions", help="list of collisions "
                                                    "from clash_check", type=str, action=FullPath, default="check")
     parser.add_argument('--plotfile', help="output file prefix for gnuplot", type=str, action=FullPath, default="plot")
+    parser.add_argument('-p', "--processes", help="maximum number of processes (default is half cpu count)", type=int,
+                        default=cpu_count() / 2)
     global args
     args = parser.parse_args()
 
