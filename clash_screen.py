@@ -7,8 +7,7 @@ from argparse import ArgumentParser
 from collections import namedtuple
 from itertools import combinations
 from shared import *
-from math import sqrt
-from numpy import array, dot
+from numpy import array, dot, sqrt
 from operator import itemgetter
 
 
