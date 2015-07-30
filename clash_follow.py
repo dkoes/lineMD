@@ -186,7 +186,7 @@ def main():
 
         # Separate based on type and whether it exceeds the minimum threshold at max distance
         (CNlow, CN), (CTlow, CT), (TNlow, TN) = [partition(
-            lambda v: max([frameResult.dist for frameResult in v.allFR]) < args.minthres,
+            lambda v: max([u.dist for u in v.allFR]) < args.minthres,
             [o for o in out if o.type == y]) for y in ("CN", "CT", "TN")]
 
         # Sort based on final distance
@@ -295,8 +295,8 @@ def parse():
     parser.add_argument("--freq", help="only keep every n frames (default is 1 for all frames)",
                         type=int, default=1)
     parser.add_argument("--outfreq", help="same as freq, but for distance output", type=int, default=1)
-    parser.add_argument("--max_plot", help="maximum number of collisions per plot (default is 10)",
-                        type=int, default=10)
+    parser.add_argument("--max_plot", help="maximum number of collisions per plot (default is 8)",
+                        type=int, default=8)
     parser.add_argument('-t', "--thres", help="collision threshold in angstroms (default is 4)",
                         type=float, default=4.)
     parser.add_argument("--minthres", help="separate collisions that never go above this distance (default is 10)",
