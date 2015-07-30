@@ -177,11 +177,11 @@ def main():
             """Separate the input list into two lists based on the condition"""
             tl = []
             fl = []
-            for item in i:
-                if c(item):
-                    tl.append(item)
+            for k in i:
+                if c(k):
+                    tl.append(k)
                 else:
-                    fl.append(item)
+                    fl.append(k)
             return tl, fl
 
         # Separate based on type and whether it exceeds the minimum threshold at max distance
@@ -215,7 +215,11 @@ def main():
                     if frameResult.frame.RMSD not in plotData or plotData[frameResult.frame.RMSD] is None:
                         plotData[frameResult.frame.RMSD] = []
                     plotData[frameResult.frame.RMSD].append(frameResult.dist)
-            plotData = sorted(plotData.iteritems(), key=itemgetter(0))
+            # Remove sections with excess data; this occurs with frames that have repeated RMSD
+            plotDataList = []
+            for item in sorted(plotData.iteritems(), key=itemgetter(0)):
+                if len(item[1]) == len(transitionList):
+                    plotDataList.append(item)
             with open(args.plotfile + name, 'w') as plot:
                 # write header
                 plot.write("RMSD ")
@@ -223,7 +227,7 @@ def main():
                     plot.write("%i/%i " % (transition.clash.res1, transition.clash.res2))
                 plot.write("\n")
                 # write rows
-                for frame in plotData:
+                for frame in plotDataList:
                     # write header column of RMSD
                     plot.write("%.3f " % frame[0])
                     for dist in frame[1]:
