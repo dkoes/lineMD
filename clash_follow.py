@@ -14,7 +14,8 @@ Atom = namedtuple('Atom', ['ID', 'coords'])
 Point = namedtuple('Point', ['x', 'y', 'z'])
 Clash = namedtuple('Clash', ['res1', 'res2'])
 Frame = namedtuple('Frame', ['frameID', 'RMSD'])
-Transition = namedtuple('Transition', ['clash', 'type', 'frameID', 'RMSD', 'atoms', 'dists'])
+Transition = namedtuple('Transition', ['clash', 'type', 'chosenFrame', 'atoms', 'allFR'])
+FrameResult = namedtuple('FrameResult', ['frame', 'dist', 'atoms'])
 
 
 def main():
@@ -53,8 +54,8 @@ def main():
     TtoN, CtoT, CtoN = set(), set(), set()
     with open(COLLISIONSPATH) as collisionsFile:
         for line in collisionsFile:
-            l = line.split()
-            t = (int(l[1]), int(l[2]))
+            transitionList = line.split()
+            t = (int(transitionList[1]), int(transitionList[2]))
             if line.startswith("TN"):
                 TtoN.add(Clash(min(t), max(t)))
             elif line.startswith("CT"):
@@ -115,7 +116,6 @@ def main():
         clash = clashes[clashID]
         # Iterate over each stored frame
         frameResults = []  # [(frame, dist, atoms), ...]
-        FrameResult = namedtuple('FrameResult', ['frame', 'dist', 'atoms'])
         for fr, frResidues in frameResData.iteritems():
             # find minimum distance between residues
             minDist = sys.maxint
@@ -129,7 +129,6 @@ def main():
             # Add the minimum distance for this clash
             frameResults.append(FrameResult(fr, minDist, minAtoms))
 
-        alldists = [item.dist for item in frameResults][0::args.outfreq]
         # Determine which frame to keep
         if clashID < TtoNcount:
             # T->N: print last positive collision
@@ -137,21 +136,21 @@ def main():
                 if distance < args.thres:  # clash exists
                     printed += "%i,%i TN %i %.3f " % (clash.res1, clash.res2, fr.frameID, fr.RMSD) + str(atoms) + "\n"
                     log(printed)
-                    return Transition(clash, "TN", fr.frameID, fr.RMSD, atoms, alldists)
+                    return Transition(clash, "TN", fr, atoms, frameResults)
         elif clashID < TtoNcount + CtoTcount:
             # C->T: print first negative collision
             for fr, distance, atoms in frameResults:
                 if distance > args.thres:  # no longer exists
                     printed += "%i,%i CT %i %.3f " % (clash.res1, clash.res2, fr.frameID, fr.RMSD) + str(atoms) + "\n"
                     log(printed)
-                    return Transition(clash, "CT", fr.frameID, fr.RMSD, atoms, alldists)
+                    return Transition(clash, "CT", fr, atoms, frameResults)
         else:
             # C->N: print first negative collision
             for fr, distance, atoms in frameResults:
                 if distance > args.thres:  # no longer exists
                     printed += "%i,%i CN %i %.3f " % (clash.res1, clash.res2, fr.frameID, fr.RMSD) + str(atoms) + "\n"
                     log(printed)
-                    return Transition(clash, "CN", fr.frameID, fr.RMSD, atoms, alldists)
+                    return Transition(clash, "CN", fr, atoms, frameResults)
 
     output = parMap(checkClash, range(len(clashes)), n=args.processes, silent=True)
     if None in output:
@@ -164,12 +163,12 @@ def main():
     # sort by type, then by RMSD, then by frameID, then by clash
 
     out = sorted([section for section in output if section is not None],
-                 key=lambda j: (j.type, j.RMSD, j.frameID, j.clash))
+                 key=lambda j: (j.type, j.chosenFrame.RMSD, j.chosenFrame.frameID, j.clash))
     sys.stdout.write("# type resname1 res1 atom1 resname2 res2 atom2 frameID RMSD\n")
     sys.stdout.flush()
-    for (res1, res2), clashType, ID, RMSD, (atom1, atom2), dists in out:
+    for (res1, res2), clashType, frame, (atom1, atom2), allFR in out:
         sys.stdout.write("%s %s %i %i %s %i %i %i %.3f\n" % (clashType, resNames[res1], res1, atom1,
-                                                             resNames[res2], res2, atom2, ID, RMSD))
+                                                             resNames[res2], res2, atom2, frame.frameID, frame.RMSD))
     sys.stdout.flush()
 
     if args.plotfile is not None:
@@ -186,11 +185,12 @@ def main():
             return tl, fl
 
         # Separate based on type and whether it exceeds the minimum threshold at max distance
-        (CNlow, CN), (CTlow, CT), (TNlow, TN) = [partition(lambda v: max(v.dists) < args.minthres,
-                                                           [o for o in out if o.type == y]) for y in ("CN", "CT", "TN")]
+        (CNlow, CN), (CTlow, CT), (TNlow, TN) = [partition(
+            lambda v: max([frameResult.dist for frameResult in v.allFR]) < args.minthres,
+            [o for o in out if o.type == y]) for y in ("CN", "CT", "TN")]
 
         # Sort based on final distance
-        (CNlow, CN, CTlow, CT, TNlow, TN) = [sorted(q, key=lambda e: e.dists[-1], reverse=True) for q in
+        (CNlow, CN, CTlow, CT, TNlow, TN) = [sorted(q, key=lambda v: v.allFR[-1].dist, reverse=True) for q in
                                              (CNlow, CN, CTlow, CT, TNlow, TN)]
 
         plotArguments = ((out, "", "All"),
@@ -204,20 +204,31 @@ def main():
             for p in xrange(0, len(e), k):
                 yield e[p:p + k]
 
-        maxDist = int(5 * round(float(max([max(o.dists) for o in out])) / 5))  # maximum reached distance rounded to 5
+        maxDist = int(5 * round(float(max([max([d.dist for d in o.allFR]) for o in out])) / 5))
+        # maximum reached distance rounded to 5
 
-        for l, name, fullName in plotArguments:
+        for transitionList, name, fullName in plotArguments:
             # Write gnuplot data
+            plotData = {}  # {RMSD: dists, ...}
+            for transition in transitionList:
+                for frameResult in transition.allFR:
+                    if frameResult.frame.RMSD not in plotData or plotData[frameResult.frame.RMSD] is None:
+                        plotData[frameResult.frame.RMSD] = []
+                    plotData[frameResult.frame.RMSD].append(frameResult.dist)
+            plotData = sorted(plotData.iteritems(), key=itemgetter(0))
             with open(args.plotfile + name, 'w') as plot:
                 # write header
                 plot.write("RMSD ")
-                for (res1, res2), clashType, ID, RMSD, ato, dists in l:
-                    plot.write("%i/%i " % (res1, res2))
+                for transition in transitionList:
+                    plot.write("%i/%i " % (transition.clash.res1, transition.clash.res2))
                 plot.write("\n")
-                for frame in xrange(len(l[0].dists)):  # number of frames
-                    plot.write("%.3f " % frameList[frame].RMSD)
-                    for res, clashType, ID, RMSD, ato, dists in l:
-                        plot.write("%.3f " % dists[frame])
+                # write rows
+                for frame in plotData:
+                    # write header column of RMSD
+                    plot.write("%.3f " % frame[0])
+                    for dist in frame[1]:
+                        # write each distance
+                        plot.write("%.3f " % dist)
                     plot.write("\n")
 
             # write gnuplot scripts
@@ -226,7 +237,7 @@ def main():
             chunksize = args.max_plot
             if name == "":
                 chunksize = sys.maxint  # this is the "all" section, no need to chunk
-            for section, chunk in enumerate(list(chunks(l, chunksize))):
+            for section, chunk in enumerate(list(chunks(transitionList, chunksize))):
                 # write a file for gnuplot commands
                 fileName = "gnuplot%s_%i.sh" % (name, section)
                 with open(fileName, 'w') as gnuplot:
