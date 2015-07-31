@@ -3,7 +3,7 @@
 # Analyze distances of discovered collisions over time
 
 from argparse import ArgumentParser
-from numpy import linalg, array
+from numpy import array, dot, sqrt
 from collections import namedtuple
 from clash_screen import selectFrames
 from shared import *
@@ -11,7 +11,6 @@ from shared import *
 __author__ = 'Charles'
 
 Atom = namedtuple('Atom', ['ID', 'coords'])
-Point = namedtuple('Point', ['x', 'y', 'z'])
 Clash = namedtuple('Clash', ['res1', 'res2'])
 Frame = namedtuple('Frame', ['frameID', 'RMSD'])
 Transition = namedtuple('Transition', ['clash', 'type', 'chosenFrame', 'atoms', 'allFR'])
@@ -99,7 +98,7 @@ def main():
                 atomID = int(vals[1])
                 if resID not in residues or residues[resID] is None:
                     residues[resID] = []
-                atomCoords = Point(*[float(line[(30 + f * 8):(38 + f * 8)]) for f in range(3)])
+                atomCoords = array([float(line[(30 + f * 8):(38 + f * 8)]) for f in range(3)])
                 resName = vals[3]  # three-letter name of residue
                 if resID not in resNames or resNames[resID] is None:
                     resNames[resID] = resName
@@ -122,7 +121,8 @@ def main():
             minAtoms = (0, 0)
             for a1, coord1 in frResidues[clash.res1]:
                 for a2, coord2 in frResidues[clash.res2]:
-                    thisDist = linalg.norm(abs(array(coord1) - array(coord2)))
+                    diff = coord1 - coord2
+                    thisDist = sqrt(dot(diff, diff))
                     if thisDist < minDist:
                         minDist = thisDist
                         minAtoms = a1, a2
