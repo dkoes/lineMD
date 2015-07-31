@@ -189,9 +189,9 @@ def main():
             lambda v: max([u.dist for u in v.allFR]) < args.minthres,
             [o for o in out if o.type == y]) for y in ("CN", "CT", "TN")]
 
-        # Sort based on final distance
-        (CNlow, CN, CTlow, CT, TNlow, TN) = [sorted(q, key=lambda v: v.allFR[-1].dist, reverse=True) for q in
-                                             (CNlow, CN, CTlow, CT, TNlow, TN)]
+        # Sort based on max distance
+        (CNlow, CN, CTlow, CT, TNlow, TN) = [sorted(q, key=lambda v: max([w.dist for w in v.allFR]), reverse=True)
+                                             for q in (CNlow, CN, CTlow, CT, TNlow, TN)]
 
         plotArguments = ((out, "", "All"),
                          (CN, "CN", "Conserved to nonexistent"), (CNlow, "CNlow", "Conserved to nonexistent (low)"),
