@@ -62,7 +62,11 @@ def main():
         system("gzip -c %s > init.rst.gz" % COORDPATH)
     COORDPATH = WORKDIR + "/init.rst.gz"
 
-    calcRefCoords(args.ref)
+    if args.ref:
+        log("Reading reference structure for RMSD\n")
+        calcRefCoords(args.ref)
+    else:
+        log("Computing distances between centroids\n")
 
     if args.stitch:
         log("Reading cluster information.\n")
