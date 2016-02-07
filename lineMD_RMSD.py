@@ -559,8 +559,6 @@ class Run(object):
 
                 with open("qscript", 'w') as qscript:
                     qscript.write("""#!/bin/bash
-AMBERHOME=/usr/local/amber14
-PATH=/usr/local/amber14/bin:$PATH
 gunzip begin.rst.gz >> out 2>&1
 pmemd.cuda -O -i line.in -o line.out -p %s -c begin.rst -r frame -x coord.nc
 for f in frame*; do mv "$f" "$f.rst" >> out 2>&1; done
@@ -589,7 +587,7 @@ $cmd
                     qscript.write("""#!/bin/bash
 module purge
 module load intel/2013.0
-module load amber/14-intel-2013-cuda-5.0
+module add  amber/14-intel-2013-cuda-7.0 
 gunzip begin.rst.gz >> out 2>&1
 pmemd.cuda -O -i line.in -o line.out -p %s -c begin.rst -r frame -x coord.nc
 for f in frame*; do mv "$f" "$f.rst" >> out 2>&1; done
@@ -612,29 +610,25 @@ $cmd
 
             with open("line.in", 'w') as inputFile:
                 if initial:
-                    ig = int(random.random() * 1000.0 % 999)  # For the initial, set the random seed and never rerun it
                     inputFile.write("""&cntrl
  imin = 0, ntx = 1, irest = 0,
  ntpr = 10000, ntwr = -%i, ntwx = %i, ntxo = 1,
- ntf = 2, ntc = 2, cut = 8.0,
- ntb = 2,  nstlim = %i, dt = 0.002,
- temp0 = 300.0, ntt = 3, ig = %i,
- gamma_ln = 1, ioutfm = 1,
- ntp = 1, pres0 = 1.0, taup = 5.0,
+ ntf = 2, ntc = 2, cut = 9999,
+ ntb = 0,  nstlim = %i, dt = 0.002,
+ temp0 = 300.0, ntt = 3, ig = -1,
+ igb = 1, ioutfm = 1,
 /
-""" % (int(args.steps / args.sample), int(args.steps / args.sample), args.steps, ig))  # sample, not frame here
+""" % (int(args.steps / args.sample), int(args.steps / args.sample), args.steps))  # sample, not frame here
                 else:  # Restart file
-                    ig = self._UID % 999999  # the random seed is UID; should be preserved across moves but still random
                     inputFile.write("""&cntrl
  imin = 0, ntx = 5, irest = 1,
  ntpr = 10000, ntwr = -%i, ntwx = %i, ntxo = 1,
- ntf = 2, ntc = 2, cut = 8.0,
- ntb = 2,  nstlim = %i, dt = 0.002,
- temp0 = 300.0, ntt = 3, ig = %i,
- gamma_ln = 1, ioutfm = 1,
- ntp = 1, pres0 = 1.0, taup = 5.0,
+ ntf = 2, ntc = 2, cut = 9999,
+ ntb = 0,  nstlim = %i, dt = 0.002,
+ temp0 = 300.0, ntt = 3, ig = -1,
+ igb = 1, ioutfm = 1,
 /
-""" % (int(args.steps / args.sample), int(args.steps / args.sample), args.steps, ig))
+""" % (int(args.steps / args.sample), int(args.steps / args.sample), args.steps))
 
     def writeInfo(self):
         """Write a run_info file for a run."""
