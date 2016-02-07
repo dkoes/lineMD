@@ -12,7 +12,6 @@ from argparse import ArgumentParser, SUPPRESS
 from atom_tools import rmsdDist, calcSegmentCenters
 import copy
 from glob import glob
-from lineMD import eventLoop, determineSplit, getFinishedRuns, stitchTrajectory  # and exportRestarts
 from numpy import zeros
 from numpy.linalg import norm
 from operator import attrgetter
@@ -1330,6 +1329,178 @@ def splitBins():
     log("Finished run migration.\n")
     NOPROGRESS = 0
     return  # Allow findNewRuns to take back to analysis
+
+def getFinishedRuns():
+    """Find the runs in the running cluster that have indicated completion by the "finished" file."""
+    global RUNNING
+    global WORKDIR
+    workdir = WORKDIR + "/CR"
+    finishedRuns = []
+    allRunning = sorted([int(name[1:]) for name in os.listdir(workdir) if
+                         os.path.isdir(os.path.join(workdir, name))])
+    RUNNING = len(allRunning)
+    for run in allRunning:
+        if os.path.isfile("%s/R%i/finished" % (workdir, run)):
+            finishedRuns.append(run)
+            RUNNING -= 1  # Decrement the global counter
+    return finishedRuns
+
+
+
+
+def stitchTrajectory():
+    """Stitch the final out.nc trajectory file."""
+    global PRMTOPPATH
+    global COORDPATH
+    global CLUSTERS
+
+    log(BLUE + "Preparing final trajectory.\n" + END)
+
+    # Populate the run database
+    RUNS = {}  # {UID, Run}
+    for cluster in CLUSTERS.values():
+        if cluster.ID != 'R':
+            for run in cluster.runs.values():
+                RUNS[str(run.UID)] = run
+
+    trajList = []
+    runList = []
+    maxMajor = max([c.majorID for c in CLUSTERS.values() if c.ID != 'R'])
+    maxMinor = max([c.minorID for c in CLUSTERS.values() if c.ID != 'R' and c.majorID == maxMajor and c.count > 0])
+    maxCluster = "%i_%i" % (maxMajor, maxMinor)
+    endingRun = random.choice(CLUSTERS[maxCluster].runs.values())
+    if args.restart_out is not None:  # Do processing on runs instead of trajectories
+        log("Found last run at %s\n" % endingRun.path)
+        runList.append(endingRun.path)
+    else:
+        decompress(str(endingRun.path) + "/coord.nc.gz")
+        trajList.append(endingRun.path + "/coord.nc")
+    while True:
+        if endingRun.previous == "initial":  # Found the initial, there is no previous
+            break
+        if endingRun.previous not in RUNS.keys():
+            fail(RED + UNDERLINE + "Error:" + END + RED + " previous run %s not found.\n" % endingRun.previous + END)
+        endingRun = RUNS[endingRun.previous]  # Move back one run
+        if args.restart_out is not None:
+            log("Found previous run at %s\n" % endingRun.path)
+            runList.append(endingRun.path)
+        else:
+            decompress(endingRun.path + "/coord.nc.gz")
+            trajList.append(endingRun.path + "/coord.nc")
+    if args.restart_out is not None:
+        global PAUSE
+        global RESTARTPATH
+        log("Exporting restarts.\n")
+        runList.reverse()
+        exportRestarts(runList)
+        while True:
+            # Check currently running processes
+            finished = True
+            for runPath in [name for name in os.listdir(RESTARTPATH) if os.path.isdir(os.path.join(RESTARTPATH))]:
+                if not os.path.isfile("%s/%s/finished" % (RESTARTPATH, runPath)):
+                    finished = False  # Not finished
+                    continue
+            if finished:
+                log("\nStitching output file.\n".ljust(getTerminalWidth()))
+                with open("ptraj.in", 'w') as script:
+                    log("parm %s\n" % PRMTOPPATH)
+                    script.write("parm %s\n" % PRMTOPPATH)
+                    decompress(COORDPATH)
+                    script.write("trajin %s 1 last 1\n" % COORDPATH.split(".gz")[0])
+                    log("trajin %s 1 last 1\n" % COORDPATH.split(".gz")[0])
+                    for runPath in [name for name in os.listdir(RESTARTPATH)
+                                    if os.path.isdir(os.path.join(RESTARTPATH))]:
+                        log("trajin %s/%s/coord.nc 1 last 1\n" % (RESTARTPATH, runPath))
+                        script.write("trajin %s/%s/coord.nc 1 last 1\n" % (RESTARTPATH, runPath))
+                        decompress("%s/%s/coord.nc.gz" % (RESTARTPATH, runPath))
+                    log("trajout out.nc netcdf\n")
+                    script.write("trajout out.nc netcdf\n")
+                system("cpptraj < ptraj.in | gzip -f > ptraj.out.gz")
+                compress(COORDPATH)
+                break
+            else:
+                for i in xrange(PAUSE):
+                    time = (PAUSE - i)
+                    log((BOLD + "\rWill check again in " + MAGENTA + str(time) + END + BOLD +
+                         " second" + ("s." if time > 1 else ".")).ljust(getTerminalWidth()) + END)
+                    sleep(1)
+                log("\r")
+
+    else:
+        log("Stitching output file.\n")
+        trajList.reverse()
+        with open("ptraj.in", 'w') as script:
+            script.write("parm %s\n" % PRMTOPPATH)
+            decompress(COORDPATH)
+            script.write("trajin %s 1 last 1\n" % COORDPATH.split(".gz")[0])
+            for line in trajList[1:]:  # Exclude the initial
+                script.write("trajin %s 1 last 1\n" % line)
+            script.write("trajout out.nc netcdf\n")
+        system("cpptraj < ptraj.in | gzip -f > ptraj.out.gz")
+        compress(COORDPATH.split(".gz")[0])
+
+    log(GREEN + "Stitching complete.\n" + END)
+
+
+def determineSplit():
+    """Determines whether splits have occurred and updates global variables to reflect this."""
+    global SPLIT
+    global CLUSTERS
+    global BINWIDTH
+
+    if SPLIT == 0:
+        # Infer the value of SPLIT from the existing bins
+        def unique(seq):
+            seen = set()
+            seen_add = seen.add
+            return [x for x in seq if not (x in seen or seen_add(x))]
+
+        # List all of the major IDs, then find the largest minor ID each has
+        majorIDs = unique([c.majorID for c in CLUSTERS.values() if c.ID != 'R'])
+        minorIDs = []
+        for majorID in majorIDs:
+            minorIDs.append(max([c.minorID for c in CLUSTERS.values() if c.ID != 'R' and c.majorID == majorID]))
+        minorIDs = unique(minorIDs)
+        if len(minorIDs) > 1:  # There are different highest minor IDs
+            fail(RED + UNDERLINE + "Error:" + END + RED + " Bins are not evenly split.\n" + END)
+        SPLIT = int(math.log(minorIDs[0] + 1, 2))
+        log("Inferring that " + MAGENTA + str(SPLIT) + END + " splits have occurred.\n")
+        if SPLIT > SPLITMAX:
+            log(YELLOW + UNDERLINE + "Warning:" + END + YELLOW +
+                " more splits have occurred than recommended. Continue with caution.\n" + END)
+        for i in xrange(SPLIT):
+            BINWIDTH = round(BINWIDTH / 2.0, args.precision)
+        log("Bin width is now " + MAGENTA + "%.*f" % (args.precision, BINWIDTH) + END + ".\n")
+
+
+def eventLoop():
+    """Handles pausing and analysis when runs complete."""
+    global PAUSE
+    global CLUSTERS
+    global WORKDIR
+    global RUNNING
+    global THREADS
+
+    while True:
+        # Check currently running processes
+        finishedRuns = getFinishedRuns()
+        if finishedRuns:
+            analysis(finishedRuns)  # Analysis will terminate the program if necessary.
+        else:
+            allRunning = [int(name[1:]) for name in os.listdir(WORKDIR + "/CR") if
+                          os.path.isdir(os.path.join(WORKDIR + "/CR", name))]
+            if not allRunning:  # CR is empty for some reason
+                analysis([])
+            # pause main thread for some seconds
+            for i in xrange(PAUSE):
+                time = (PAUSE - i)
+                log((BOLD + "\rWill check again in " + MAGENTA + str(time) + END + BOLD +
+                     " second" + ("s." if time > 1 else ".")).ljust(getTerminalWidth()) + END)
+                sleep(1)
+            log("\r")
+
+    sys.exit(0)  # For safety; nothing should happen after the loop terminates.
+
 
 
 if __name__ == "__main__":
