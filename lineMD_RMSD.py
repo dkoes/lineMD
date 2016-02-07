@@ -21,6 +21,7 @@ from shared import *
 import shutil, sys
 from stat import S_IEXEC
 from time import strftime
+import lineMD_vars as G
 
 __author__ = "Charles Yuan"
 __license__ = "GPL"
@@ -31,7 +32,7 @@ __status__ = "Development"
 
 def main():
     """Calls major subroutines, prepares files, and prints messages. Hands control over to eventLoop afterwards."""
-    parse()
+    args = parse()
 
     log(CYAN + BOLD + "lineMD" + END + CYAN + " version " + MAGENTA + str(__version__) + CYAN + " starting up on "
         + MAGENTA + "%s.\n" % args.queue_name + END)
@@ -54,20 +55,17 @@ def main():
     else:
         log(MAGENTA + "disabled.\n" + END)
 
-    runInit = not prep()
+    runInit = not prep(args)
 
-    global COORDPATH
-
-    if not os.path.isfile(WORKDIR + "/init.rst.gz"):
-        system("gzip -c %s > init.rst.gz" % COORDPATH)
-    COORDPATH = WORKDIR + "/init.rst.gz"
+    if not os.path.isfile(G.WORKDIR + "/init.rst.gz"):
+        system("gzip -c %s > init.rst.gz" % G.COORDPATH)
+    G.COORDPATH = G.WORKDIR + "/init.rst.gz"
 
     if args.ref:
         log("Reading reference structure for RMSD\n")
         calcRefCoords(args.ref)
     else:
-        global REFCOORDS
-        REFCOORDS = None
+        G.REFCOORDS = None
         log("Computing distances between centroids\n")
 
     if args.stitch:
@@ -77,19 +75,19 @@ def main():
         sys.exit(0)
 
     if runInit:
-        init()
+        init(args)
     if args.migrate:
         log("Reading cluster information.\n")
         readClusterInfo(silent=True, readInfo=False, readRuns=False, readExplored=False)  # Read nothing
         determineSplit()
         readClusterInfo(readExplored=False)  # do not read explored
         # move runs for each cluster
-        for cluster in sorted([c for c in CLUSTERS.values() if c.ID != 'R'], key=attrgetter("dist")):
+        for cluster in sorted([c for c in G.CLUSTERS.values() if c.ID != 'R'], key=attrgetter("dist")):
             migrateRuns([run.ID for run in cluster.runs.values()], cluster)
-    if not os.path.isdir(WORKDIR + "/CR"):
+    if not os.path.isdir(G.WORKDIR + "/CR"):
         fail(RED + UNDERLINE + "Error:" + END + RED + " the running cluster is missing.\n" + END)
     elif not runInit:
-        print("WORKDIR",WORKDIR)
+        print("WORKDIR",G.WORKDIR)
         finishedRuns = getFinishedRuns()
         if finishedRuns:
             analysis(finishedRuns)
@@ -141,19 +139,18 @@ def parse():
                                                  " each tuple specifies a begin and end residue for the segment "
                                                  "(inclusive)",
                         type=str, action="store")
-    global args
     args = parser.parse_args()
     
     if (args.ref == None) and (args.segments == None):
        print('Need at least one of ref (for rmsd comparison) and/or segments (for distance)')
        sys.exit(1)
+    return args
 
 
-def prep():
+def prep(args):
     """Sets up variables for the entire script. Also detects whether analysis runs are necessary and
     returns a boolean to indicate this."""
-    global WORKDIR
-    WORKDIR = os.getcwd()
+    G.WORKDIR = os.getcwd()
 
     global PAUSE
     if args.loop <= 0:
@@ -163,6 +160,7 @@ def prep():
 
     global BINWIDTH
     BINWIDTH = round(args.bin, args.precision)
+    G.PRECISION = args.precision
 
     global RUNNING  # Number of threads currently running
     RUNNING = 0
@@ -170,12 +168,11 @@ def prep():
     global THREADS
     THREADS = args.threads
 
-    global CLUSTERS  # Dictionary of Cluster IDs and clusters
-    CLUSTERS = {}
+    G.CLUSTERS = {}
 
     global RUNANALYSIS
     RUNANALYSIS = False
-    if os.path.exists(WORKDIR + "/C0_0") or os.path.exists(WORKDIR + "/CR"):
+    if os.path.exists(G.WORKDIR + "/C0_0") or os.path.exists(G.WORKDIR + "/CR"):
         RUNANALYSIS = True
 
     # Basic verifications
@@ -191,33 +188,32 @@ def prep():
 
     global PRMTOPPATH
     global REFPRMTOPPATH
-    global COORDPATH
     global TRASHPATH
     global RESTARTPATH
 
     # Path modifications
     if args.prmtop is not None and not os.path.isabs(args.prmtop):
-        PRMTOPPATH = WORKDIR + "/" + args.prmtop
+        PRMTOPPATH = G.WORKDIR + "/" + args.prmtop
     else:
         PRMTOPPATH = args.prmtop
     if args.refprmtop is None:
         REFPRMTOPPATH = PRMTOPPATH
     elif args.refprmtop is not None and not os.path.isabs(args.refprmtop):
-        REFPRMTOPPATH = WORKDIR + "/" + args.refprmtop
+        REFPRMTOPPATH = G.WORKDIR + "/" + args.refprmtop
     else:
         REFPRMTOPPATH = args.refprmtop
     if args.coord is not None and not os.path.isabs(args.coord):
-        COORDPATH = WORKDIR + "/" + args.coord
+        G.COORDPATH = G.WORKDIR + "/" + args.coord
     else:
-        COORDPATH = args.coord
+        G.COORDPATH = args.coord
     if args.restart_out is not None and not os.path.isabs(args.restart_out):
-        RESTARTPATH = WORKDIR + "/" + args.restart_out
+        RESTARTPATH = G.WORKDIR + "/" + args.restart_out
     else:
         RESTARTPATH = args.restart_out
     if args.restart_out is not None and not os.path.isdir(RESTARTPATH):
         os.mkdir(RESTARTPATH)
     if args.trash is not None and not os.path.isabs(args.trash):
-        TRASHPATH = WORKDIR + "/" + args.trash
+        TRASHPATH = G.WORKDIR + "/" + args.trash
     else:
         TRASHPATH = args.trash
     if args.trash is not None and not os.path.isdir(TRASHPATH):
@@ -241,7 +237,7 @@ def prep():
     SPLITMAX = 0
     while True:
         oldBinWidth = tempBinWidth
-        tempBinWidth = round(tempBinWidth / 2.0, args.precision)
+        tempBinWidth = round(tempBinWidth / 2.0, G.PRECISION)
         if oldBinWidth == 2 * tempBinWidth:  # Divide and round, then multiply. If not equal, then splitting should end
             SPLITMAX += 1
         else:
@@ -305,9 +301,11 @@ class Run(object):
     _explored = 0  # the number of times this run has been copied
     _dist = 0  # distance of the ligand from the protein
 
-    def __init__(self, ID=0, UID=0, clusterID='0_0', previous=None, explored=0, frame=0):
+    def __init__(self, steps, sample, ID=0, UID=0, clusterID='0_0', previous=None, explored=0, frame=0):
         self._ID = int(ID)
         self._clusterID = str(clusterID)
+        self.steps = steps
+        self.sample = sample
         self._previous = previous
         self._UID = int(UID)
         self._explored = int(explored)
@@ -318,7 +316,7 @@ class Run(object):
 
     @property
     def path(self):  # directory holding trajectory files
-        return "%s/C%s/R%i" % (WORKDIR, self._clusterID, self._ID)
+        return "%s/C%s/R%i" % (G.WORKDIR, self._clusterID, self._ID)
 
     @property
     def shortPath(self):
@@ -354,7 +352,7 @@ class Run(object):
         newUID = 0  # default
         # Try opening the existing currentUID file
         try:
-            with open(WORKDIR + "/currentUID") as currentUID:
+            with open(G.WORKDIR + "/currentUID") as currentUID:
                 info = []
                 for line in currentUID:
                     info.append(int(line))
@@ -362,7 +360,7 @@ class Run(object):
         except IOError:
             pass  # No existing file
         # Write a new currentUID file
-        with open(WORKDIR + "/currentUID", 'w') as currentUID:
+        with open(G.WORKDIR + "/currentUID", 'w') as currentUID:
             currentUID.write(str(newUID) + '\n')
         # Set the UID
         return newUID
@@ -379,7 +377,7 @@ class Run(object):
             newID = max(runDirectories) + 1
         else:
             newID = 0
-        new = Run(ID=newID, clusterID=c.ID)  # No UID because we will create with run_info
+        new = Run(self.steps, self.sample, ID=newID, clusterID=c.ID)  # No UID because we will create with run_info
         coord = None
         outFile = None
         inFile = None
@@ -470,19 +468,19 @@ class Run(object):
 
             if self._clusterID == '0_0' and self._ID == 0:  # This is initial, skip all that stuff
                 with open(self.path + "/frame_0.pdb") as pdb:
-                    self._dist = self.reactionDistance(pdbLines=list(pdb), refCoords=REFCOORDS, segments=SEGMENTS)
+                    self._dist = self.reactionDistance(pdbLines=list(pdb), refCoords=G.REFCOORDS, segments=SEGMENTS)
                 self.writeInfo()
                 return self._dist, 0
 
             else:  # This is not initial
                 def getDist(fr):
                     with open(self.path + "/frame_%i.pdb" % fr) as thisPDB:
-                        dist = self.reactionDistance(pdbLines=list(thisPDB), refCoords=REFCOORDS, segments=SEGMENTS)
+                        dist = self.reactionDistance(pdbLines=list(thisPDB), refCoords=G.REFCOORDS, segments=SEGMENTS)
                     return fr, dist
 
                 with directory(self.path):
-                    sampleFrames = range(int(args.steps / args.sample), args.steps + int(args.steps / args.sample),
-                                         int(args.steps / args.sample))
+                    sampleFrames = range(int(self.steps / self.sample), self.steps + int(self.steps / self.sample),
+                                         int(slef.steps / self.sample))
                     distances = parMap(getDist, sampleFrames, n=(cpu_count() / 2))
 
                     # Get the right frame with min ending distance
@@ -493,7 +491,7 @@ class Run(object):
                     # recreate the coordinate file
                     with open("ptraj.in", 'w') as script:
                         script.write("parm %s\n" % PRMTOPPATH)
-                        script.write("trajin coord.nc 1 %i 1\n" % int(minDistFrame / int(args.steps / args.sample)))
+                        script.write("trajin coord.nc 1 %i 1\n" % int(minDistFrame / int(self.steps / self.sample)))
                         script.write("trajout coord_new.nc netcdf\n")
                     system("cpptraj < ptraj.in | gzip -f > ptraj.out.gz")
                     os.remove("coord.nc")
@@ -538,10 +536,9 @@ class Run(object):
 
     def delete(self, trash=True):
         """Deletes the files associated with this run."""
-        global CLUSTERS
         global TRASHPATH
-        if self.ID in CLUSTERS[self.clusterID].runs.keys():
-            del CLUSTERS[self.clusterID].runs[self.ID]
+        if self.ID in G.CLUSTERS[self.clusterID].runs.keys():
+            del G.CLUSTERS[self.clusterID].runs[self.ID]
         if TRASHPATH is not None and trash:
             from time import time
 
@@ -553,7 +550,7 @@ class Run(object):
         """Write the qsub and qscript scripts for this run"""
         global PRMTOPPATH
         with directory(self.path):
-            frameSeparation = int(args.steps / args.sample)
+            frameSeparation = int(self.steps / self.sample)
             if args.queue_name in ["dept_gpu", "any_gpu", "bahar_gpu"]:
                 with open("run.sh", 'w') as runScript:
                     runScript.write("#!/bin/bash\n")
@@ -578,7 +575,7 @@ done
 gzip ptraj_frames.out >> out 2>&1
 touch finished >> out 2>&1
 $cmd
-""" % (PRMTOPPATH, frameSeparation, frameSeparation, args.steps, PRMTOPPATH))
+""" % (PRMTOPPATH, frameSeparation, frameSeparation, self.steps, PRMTOPPATH))
             elif args.queue_name == "gpu_short":
                 with open("run.sh", 'w') as runScript:
                     runScript.write("#!/bin/bash\n")
@@ -607,7 +604,7 @@ done
 gzip ptraj_frames.out >> out 2>&1
 touch finished >> out 2>&1
 $cmd
-""" % (PRMTOPPATH, frameSeparation, frameSeparation, args.steps, PRMTOPPATH))
+""" % (PRMTOPPATH, frameSeparation, frameSeparation, self.steps, PRMTOPPATH))
 
             os.chmod("run.sh", os.stat("run.sh").st_mode | S_IEXEC)
 
@@ -621,7 +618,7 @@ $cmd
  temp0 = 300.0, ntt = 3, ig = -1,
  igb = 1, ioutfm = 1,
 /
-""" % (int(args.steps / args.sample), int(args.steps / args.sample), args.steps))  # sample, not frame here
+""" % (int(self.steps / self.sample), int(self.steps / self.sample), self.steps))  # sample, not frame here
                 else:  # Restart file
                     inputFile.write("""&cntrl
  imin = 0, ntx = 5, irest = 1,
@@ -631,7 +628,7 @@ $cmd
  temp0 = 300.0, ntt = 3, ig = -1,
  igb = 1, ioutfm = 1,
 /
-""" % (int(args.steps / args.sample), int(args.steps / args.sample), args.steps))
+""" % (int(self.steps / self.sample), int(self.steps / self.sample), self.steps))
 
     def writeInfo(self):
         """Write a run_info file for a run."""
@@ -641,7 +638,7 @@ Dist: %.*f
 PreviousUID: %s
 Explored: %i
 Frame: %i
-""" % (self._UID, args.precision, self._dist, self._previous, self._explored, self._frame))
+""" % (self._UID, G.PRECISION, self._dist, self._previous, self._explored, self._frame))
 
     def readInfo(self):
         """Read a run_info file for a run."""
@@ -684,7 +681,7 @@ class Cluster(object):
 
     def __str__(self):
         return "<Cluster: ID %s, %i runs, distance %.*f>" % \
-               (self._ID, self.count, args.precision, self._dist)
+               (self._ID, self.count, G.PRECISION, self._dist)
 
     @property
     def count(self):
@@ -692,15 +689,15 @@ class Cluster(object):
 
     @property
     def dist(self):
-        return round(self._dist, args.precision)
+        return round(self._dist, G.PRECISION)
 
     @dist.setter
     def dist(self, dist):
-        self._dist = round(dist, args.precision)
+        self._dist = round(dist, G.PRECISION)
 
     @property
     def path(self):  # directory holding runs and the "cluster_info" file
-        return "%s/C%s" % (WORKDIR, self._ID)
+        return "%s/C%s" % (G.WORKDIR, self._ID)
 
     @property
     def shortPath(self):
@@ -770,7 +767,7 @@ class Cluster(object):
         runDirectories = [int(name[1:]) for name in os.listdir(self.path) if
                           os.path.isdir(os.path.join(self.path, name))]
         for runID in runDirectories:
-            run = Run(ID=runID, clusterID=self._ID)  # No UID because we will readInfo()
+            run = Run(self.steps, self.sample, ID=runID, clusterID=self._ID)  # No UID because we will readInfo()
             if not run.check("end.rst.gz"):
                 if run.check("end.rst"):
                     compress(run.path + "/end.rst")
@@ -816,7 +813,7 @@ class Cluster(object):
             return
         with open(self.path + "/cluster_info", 'w') as clusterInfo:
             clusterInfo.write("""MinDistance: %.*f
-""" % (args.precision, self._dist))
+""" % (G.PRECISION, self._dist))
 
     def readInfo(self):
         """Read a cluster_info file for a cluster."""
@@ -842,40 +839,37 @@ class Cluster(object):
     def explore(self, dist):
         """Mark the distance in dist as explored in the central file and increment the internal count."""
         try:
-            with open(WORKDIR + "/explored_dist", 'a') as exploredDist:
-                exploredDist.write("%.*f\n" % (args.precision, dist))
+            with open(G.WORKDIR + "/explored_dist", 'a') as exploredDist:
+                exploredDist.write("%.*f\n" % (G.PRECISION, dist))
         except IOError:
             # Write a new file
-            with open(WORKDIR + "/explored_dist", 'w') as exploredDist:
-                exploredDist.write("%.*f\n" % (args.precision, dist))
+            with open(G.WORKDIR + "/explored_dist", 'w') as exploredDist:
+                exploredDist.write("%.*f\n" % (G.PRECISION, dist))
         if self._ID != 'R':
             self._explored += 1
 
 
-def init():
+def init(args):
     """Prepares the initial cluster by copying files. Also begins initial runs based on the thread parameter."""
-    global CLUSTERS
-    global WORKDIR
     global PRMTOPPATH
-    global COORDPATH
     global THREADS
 
     log(CYAN + "Beginning initialization.\n" + END)
-    log("Bin width is " + MAGENTA + "%.*f" % (args.precision, BINWIDTH) + END + ".\n")
+    log("Bin width is " + MAGENTA + "%.*f" % (G.PRECISION, BINWIDTH) + END + ".\n")
     log("Copying and writing input files.\n")
 
     # Register cluster 0_0 with the dictionary
-    CLUSTERS['0_0'] = Cluster(ID='0_0', runs={})  # do not know distance yet
-    CLUSTERS['0_0'].create()
+    G.CLUSTERS['0_0'] = Cluster(ID='0_0', G.PRECISION, runs={})  # do not know distance yet
+    G.CLUSTERS['0_0'].create()
 
-    initRun = Run(previous="initial", UID=Run.getNextUID())
-    CLUSTERS['0_0'].addRun(ID=0, run=initRun)
-    initRun.create(endRestart=COORDPATH, initial=True)
+    initRun = Run(args.steps, args.sample, previous="initial", UID=Run.getNextUID())
+    G.CLUSTERS['0_0'].addRun(ID=0, run=initRun)
+    initRun.create(endRestart=G.COORDPATH, initial=True)
     if not initRun.check("end.rst.gz"):
         fail(RED + UNDERLINE + "Error: " + END + RED + " initial coordinate file is invalid.\n" + END)
 
-    if not os.path.isfile(WORKDIR + "/C0_0/R0/frame_0.pdb"):
-        with directory(WORKDIR + "/C0_0/R0"):
+    if not os.path.isfile(G.WORKDIR + "/C0_0/R0/frame_0.pdb"):
+        with directory(G.WORKDIR + "/C0_0/R0"):
             with open("ptraj.in", 'w') as script:
                 decompress("end.rst.gz")
                 script.write("""parm %s
@@ -889,27 +883,26 @@ trajout frame_0.pdb pdb
     calcInitDist()
 
     # Register the running cluster
-    CLUSTERS['R'] = Cluster(ID='R', runs={})
-    CLUSTERS['R'].create()
+    G.CLUSTERS['R'] = Cluster(ID='R', G.PRECISION, runs={})
+    G.CLUSTERS['R'].create()
 
     for i in xrange(THREADS):
         # Create runs in the running cluster
         thisRun = Run(ID=i, clusterID='R', previous=initRun.UID, UID=Run.getNextUID())
-        CLUSTERS['R'].addRun(ID=i, run=thisRun)
-        thisRun.create(beginRestart=COORDPATH, initial=True)
+        G.CLUSTERS['R'].addRun(ID=i, run=thisRun)
+        thisRun.create(beginRestart=G.COORDPATH, initial=True)
         initRun.explored += 1
         initRun.writeInfo()
         thisRun.execute()  # Begin the run
         # Write to the explored_dist file
-        CLUSTERS['R'].explore(CLUSTERS['0_0'].dist + BINWIDTH)
+        G.CLUSTERS['R'].explore(G.CLUSTERS['0_0'].dist + BINWIDTH)
     log(GREEN + "%i initial runs have begun on %s.\n" % (RUNNING, strftime("%c")) + END)
 
 
 def calcRefCoords(ref):
     """Reads the coordinates of the reference file into the global variable."""
-    global REFCOORDS
     
-    if not os.path.isfile(WORKDIR + "/reference.pdb"):
+    if not os.path.isfile(G.WORKDIR + "/reference.pdb"):
      with open("ptraj.in", 'w') as script:
         script.write("parm %s\n" % REFPRMTOPPATH)
         script.write("trajin %s 1 1 1\n" % ref)
@@ -917,7 +910,7 @@ def calcRefCoords(ref):
      system("cpptraj < ptraj.in > /dev/null 2> /dev/null")
         
     pdbLines = []
-    with open(WORKDIR + "/reference.pdb") as pdb:
+    with open(G.WORKDIR + "/reference.pdb") as pdb:
         if SEGMENTS is None:  # Process everything
             for pdbLine in pdb:
                 # Skip non ATOM lines and non-alpha carbons
@@ -938,7 +931,7 @@ def calcRefCoords(ref):
     for index, line in enumerate(pdbLines):
         for j in range(3):
             coords[index, j] = float(line[(30 + j * 8):(38 + j * 8)])
-    REFCOORDS = coords
+    G.REFCOORDS = coords
 
 
 def calcInitDist():
@@ -947,19 +940,19 @@ def calcInitDist():
     global RUNANALYSIS
     if not RUNANALYSIS:
         log("Calculating initial distance.\n")
-        initDist = CLUSTERS['0_0'].getRun(ID=0).processDist()[0]
-        CLUSTERS['0_0'].dist = initDist - BINWIDTH  # This bin ends here
-        CLUSTERS['0_0'].writeInfo()
+        initDist = G.CLUSTERS['0_0'].getRun(ID=0).processDist()[0]
+        G.CLUSTERS['0_0'].dist = initDist - BINWIDTH  # This bin ends here
+        G.CLUSTERS['0_0'].writeInfo()
     else:  # analysis
-        initDist = CLUSTERS['0_0'].dist + BINWIDTH
+        initDist = G.CLUSTERS['0_0'].dist + BINWIDTH
     if not RUNANALYSIS:
-        log(BLUE + "Initial RMSD is " + MAGENTA + "%.*f" % (args.precision, initDist) + BLUE +
-            " and the first bin ends at " + MAGENTA + "%.*f" % (args.precision,
-                                                                CLUSTERS['0_0'].dist) + BLUE + ".\n" + END)
+        log(BLUE + "Initial RMSD is " + MAGENTA + "%*.3f" % (G.PRECISION,initDist) + BLUE +
+            " and the first bin ends at " + MAGENTA + "%*.3f" % (G.PRECISION,
+                                                                G.CLUSTERS['0_0'].dist) + BLUE + ".\n" + END)
         if args.min is not None:
-            log(BLUE + "Analysis RMSD endpoint will be " + MAGENTA + "%.*f" %
-                (args.precision, args.min) + BLUE + " angstroms.\n" + END)
-            log(BLUE + "Runs ending after " + MAGENTA + "%.*f" % (args.precision, initDist + args.max) +
+            log(BLUE + "Analysis RMSD endpoint will be " + MAGENTA + "%.3f" %
+                (args.min) + BLUE + " angstroms.\n" + END)
+            log(BLUE + "Runs ending after " + MAGENTA + "%3.f" % (initDist + args.max) +
                 BLUE + " angstroms will be rejected.\n")
         else:
             log('\n')
@@ -968,8 +961,6 @@ def calcInitDist():
 def analysis(runDirectories):
     """Calls the various analysis methods runs with IDs in runDirectories and in the running cluster,
     and decides whether further analysis is necessary."""
-    global CLUSTERS
-    global WORKDIR
     global SPLIT
     global BINWIDTH
     global RUNANALYSIS
@@ -985,16 +976,16 @@ def analysis(runDirectories):
         readClusterInfo()  # Read everything and print
     else:
         readClusterInfo(silent=True, readExplored=False)  # do not read explored right now
-        migrateRuns(runDirectories, oldCluster=CLUSTERS['R'])
+        migrateRuns(runDirectories, oldCluster=G.CLUSTERS['R'])
         log("Rereading cluster information.\n")
         readClusterInfo()  # Re-read everything after migration and print
 
     # Signal completion if end cluster reached
-    maxCluster = int(max([c.rawID for c in CLUSTERS.values() if c.ID != 'R' and c.count > 0]))
+    maxCluster = int(max([c.rawID for c in G.CLUSTERS.values() if c.ID != 'R' and c.count > 0]))
     # Calculate initial and ending distance
     calcInitDist()
 
-    desiredCluster = round((CLUSTERS["0_0"].dist + BINWIDTH - args.min) / BINWIDTH)
+    desiredCluster = round((G.CLUSTERS["0_0"].dist + BINWIDTH - args.min) / BINWIDTH)
     percentage = float(maxCluster) / desiredCluster * 100
     if percentage > 100.0:
         percentage = 100.0
@@ -1014,26 +1005,25 @@ def readClusterInfo(silent=False, readInfo=True, readRuns=True, readExplored=Tru
     silent controls logging, correct is currently disabled, readInfo controls reading distance,
     readRuns controls getting run counts and lists, and readExplored (slowest) controls getting explored count.
     All are True by default. If all are off, the cluster will only know its ID."""
-    global CLUSTERS
-    CLUSTERS = {}
-    clusterDirectories = sorted([name[1:] for name in glob("C*_*") if os.path.isdir(os.path.join(WORKDIR, name))],
+    G.CLUSTERS = {}
+    clusterDirectories = sorted([name[1:] for name in glob("C*_*") if os.path.isdir(os.path.join(G.WORKDIR, name))],
                                 key=lambda i: (int(i.split('_')[0]), int(i.split('_')[1])))
     # Generate Clusters, read info files, and populate the master dictionary
     # lastDist = None
     # lastID = None
     exploredDist = []
     if readExplored:
-        with open(WORKDIR + "/explored_dist") as exploredDistFile:
+        with open(G.WORKDIR + "/explored_dist") as exploredDistFile:
             for line in exploredDistFile:
                 exploredDist.append(float(line))
         exploredDist.sort(reverse=True)
-        with open(WORKDIR + "/explored_dist", 'w') as exploredDistFile:
+        with open(G.WORKDIR + "/explored_dist", 'w') as exploredDistFile:
             for dist in exploredDist:
-                exploredDistFile.write("%.*f\n" % (args.precision, dist))
+                exploredDistFile.write("%.*f\n" % (G.PRECISION, dist))
     lastStart = 0
     for index, clusterID in enumerate(clusterDirectories):
         cluster = Cluster(ID=clusterID, runs={})  # Do not know dist yet
-        CLUSTERS[clusterID] = cluster
+        G.CLUSTERS[clusterID] = cluster
         if readInfo:
             cluster.readInfo()  # Now it should have dist
         if readRuns:
@@ -1050,11 +1040,11 @@ def readClusterInfo(silent=False, readInfo=True, readRuns=True, readExplored=Tru
         if readInfo:
             maxBinID = 0
             if args.adjust:
-                maxBinID = max([c.rawID for c in CLUSTERS.values() if c.count > 0])
-            for cluster in sorted(CLUSTERS.values(), key=lambda cl: (cl.majorID, cl.minorID)):
+                maxBinID = max([c.rawID for c in G.CLUSTERS.values() if c.count > 0])
+            for cluster in sorted(G.CLUSTERS.values(), key=lambda cl: (cl.majorID, cl.minorID)):
                 log("Cluster " + MAGENTA + str(cluster.ID) + END + " from " + MAGENTA + "%.*f"
-                    % (args.precision, cluster.dist) + END + " to " + MAGENTA + "%.*f" %
-                    (args.precision, cluster.dist + BINWIDTH) + END)
+                    % (G.PRECISION, cluster.dist) + END + " to " + MAGENTA + "%.*f" %
+                    (G.PRECISION, cluster.dist + BINWIDTH) + END)
                 if readRuns:
                     log(", with " + MAGENTA + str(cluster.count) + END + " runs")
                     if readExplored:
@@ -1068,13 +1058,12 @@ def readClusterInfo(silent=False, readInfo=True, readRuns=True, readExplored=Tru
                 else:
                     log(".\n")
 
-    CLUSTERS['R'] = Cluster(ID='R', runs={})  # Running cluster
+    G.CLUSTERS['R'] = Cluster(ID='R', runs={})  # Running cluster
 
 
 def migrateRuns(runDirectories, oldCluster):
     """Examines the runs with IDs in runDirectories within the provided cluster.
      Moves folders to appropriate clusters and creates new ones (if the cluster is the running cluster)."""
-    global CLUSTERS
     global NOPROGRESS
     global SPLIT
     if oldCluster.ID != 'R':
@@ -1082,7 +1071,7 @@ def migrateRuns(runDirectories, oldCluster):
     else:
         log(BLUE + "Examining the running cluster.\n" + END)
     # Sort the clusters by dist
-    sortedClustersList = sorted(CLUSTERS.values(), key=attrgetter("dist"))
+    sortedClustersList = sorted(G.CLUSTERS.values(), key=attrgetter("dist"))
     sortedIDsList = [c.ID for c in sortedClustersList]
     for runID in runDirectories:  # should already be sorted
         run = Run(ID=runID, clusterID=oldCluster.ID)  # No UID because we will readInfo()
@@ -1116,8 +1105,8 @@ def migrateRuns(runDirectories, oldCluster):
             log(YELLOW + " has failed unexpectedly and will be deleted.\n" + END)
             run.delete()
             continue
-        dist = round(float(dist), args.precision)
-        log(" has distance " + MAGENTA + "%.*f" % (args.precision, dist) + END + " at frame " + MAGENTA +
+        dist = round(float(dist), G.PRECISION)
+        log(" has distance " + MAGENTA + "%.*f" % (G.PRECISION, dist) + END + " at frame " + MAGENTA +
             str(frame) + END)
         # Find the right place for this one, if it is in an existing cluster
         found = False
@@ -1144,7 +1133,7 @@ def migrateRuns(runDirectories, oldCluster):
                 run.delete()
                 continue
             # Make a new bin for this one
-            initRight = CLUSTERS['0_0'].dist + BINWIDTH
+            initRight = G.CLUSTERS['0_0'].dist + BINWIDTH
             diff = abs(initRight - dist)
             newRawID = int(math.ceil(diff / float(BINWIDTH)))  # simple number of bins, assuming no split
             if dist > initRight:  # Right of initial cluster
@@ -1163,9 +1152,9 @@ def migrateRuns(runDirectories, oldCluster):
             if newID in sortedIDsList:
                 log(".\n")
                 fail(RED + UNDERLINE + "Error:" + END + RED + " run was not found but should be in clusters.\n" + END)
-            newDist = CLUSTERS['0_0'].dist - newRawID * BINWIDTH
+            newDist = G.CLUSTERS['0_0'].dist - newRawID * BINWIDTH
             cluster = Cluster(ID=newID, runs={}, dist=newDist)
-            CLUSTERS[newID] = cluster
+            G.CLUSTERS[newID] = cluster
             cluster.create()
             newRun = Run.move(run, cluster)
             log(" and belongs (in new cluster) at " + MAGENTA + "%s.\n" % newRun.shortPath + END)
@@ -1175,14 +1164,14 @@ def migrateRuns(runDirectories, oldCluster):
                     thisID = "%i_%i" % (newMajor, thisMinor)
                     if thisID not in sortedIDsList and thisID != newID:  # Is new and not the one we just made
                         thisRawID = newMajor * int(pow(2, SPLIT)) + thisMinor
-                        thisDist = round(CLUSTERS['0_0'].dist - thisRawID * BINWIDTH, args.precision)
+                        thisDist = round(G.CLUSTERS['0_0'].dist - thisRawID * BINWIDTH, G.PRECISION)
                         thisCluster = Cluster(ID=thisID, runs={}, dist=thisDist)
-                        CLUSTERS[thisID] = thisCluster
+                        G.CLUSTERS[thisID] = thisCluster
                         thisCluster.create()
             if newDist < 0:  # We made a new positive bin
                 NOPROGRESS = 0  # We have made progress
             # Re-read to prepare for next iteration through the loop, since CLUSTERS should be accurate now
-            sortedClustersList = sorted(CLUSTERS.values(), key=attrgetter("dist"))
+            sortedClustersList = sorted(G.CLUSTERS.values(), key=attrgetter("dist"))
             sortedIDsList = [c.ID for c in sortedClustersList]
 
 
@@ -1203,7 +1192,7 @@ def findNewRuns():
 
     alreadySelected = False
     # Find cluster with least explored value, then largest bin number (bin will never tie)
-    clusterList = [c for c in CLUSTERS.values() if c.ID != 'R' and c.count > 0]
+    clusterList = [c for c in G.CLUSTERS.values() if c.ID != 'R' and c.count > 0]
     maxBinID = max([c.rawID for c in clusterList if c.count > 0])
     while RUNNING < THREADS:
         if args.adjust:
@@ -1251,8 +1240,8 @@ def findNewRuns():
             str(selRun.UID) + END + "), explored " + MAGENTA + str(selRun.explored) + END + " times.\n")
 
         # Go to running, get the name of the next available run
-        runningDirectories = [int(name[1:]) for name in os.listdir(WORKDIR + "/CR") if
-                              os.path.isdir(os.path.join(WORKDIR + "/CR", name))]
+        runningDirectories = [int(name[1:]) for name in os.listdir(G.WORKDIR + "/CR") if
+                              os.path.isdir(os.path.join(G.WORKDIR + "/CR", name))]
         if not runningDirectories:
             nextNum = 0
         else:
@@ -1267,45 +1256,44 @@ def findNewRuns():
         startDist = selRun.processDist()[0]
         selCluster.explore(startDist)
         log(GREEN + "Executed run %i of %i (new ID %i, unique ID %i, start distance %.*f) on %s.\n" %
-            (RUNNING, THREADS, newRun.ID, newRun.UID, args.precision, startDist, strftime("%c")) + END)
+            (RUNNING, THREADS, newRun.ID, newRun.UID, G.PRECISION, startDist, strftime("%c")) + END)
 
 
 def splitBins():
     """Perform bin splitting and run migration to new clusters"""
     global SPLIT
     global BINWIDTH
-    global CLUSTERS
     global NOPROGRESS
 
     SPLIT += 1
-    BINWIDTH = round(BINWIDTH / 2.0, args.precision)
+    BINWIDTH = round(BINWIDTH / 2.0, G.PRECISION)
 
     log(CYAN + "Splitting bins for iteration %i of %i.\n" % (SPLIT, SPLITMAX) + END)
 
     # delete clusters beyond range
-    clustersList = copy.copy(CLUSTERS.values())
+    clustersList = copy.copy(G.CLUSTERS.values())
     for cluster in clustersList:
-        if cluster.dist >= CLUSTERS['0_0'].dist + BINWIDTH + args.max and cluster.ID != 'R':  # Found one bad cluster
+        if cluster.dist >= G.CLUSTERS['0_0'].dist + BINWIDTH + args.max and cluster.ID != 'R':  # Found one bad cluster
             majorID = cluster.majorID
             for otherCluster in clustersList:
-                if otherCluster.majorID == majorID and otherCluster.ID in CLUSTERS:
+                if otherCluster.majorID == majorID and otherCluster.ID in G.CLUSTERS:
                     # Don't care about the minor ID. Just delete the whole set
                     shutil.rmtree(otherCluster.path)
-                    del CLUSTERS[otherCluster.ID]
+                    del G.CLUSTERS[otherCluster.ID]
 
     # find available IDs
-    nextMinor = max([c.minorID for c in CLUSTERS.values() if c.ID != 'R']) + 1
+    nextMinor = max([c.minorID for c in G.CLUSTERS.values() if c.ID != 'R']) + 1
 
     # create new clusters in database
     # The clusters before split:
-    oldClusterList = sorted([c for c in CLUSTERS.values() if c.ID != 'R'], key=attrgetter("dist"))
+    oldClusterList = sorted([c for c in G.CLUSTERS.values() if c.ID != 'R'], key=attrgetter("dist"))
     zeroClusterList = [c for c in oldClusterList if c.minorID == 0]  # Only clusters "C*_0"
     for zeroCluster in zeroClusterList:
         # Create new clusters
         for i in xrange(int(pow(2, SPLIT - 1))):  # Repeat for each new folder, based on the number of previous splits
             newID = "%i_%i" % (zeroCluster.majorID, nextMinor + i)
             newCluster = Cluster(ID=newID, runs={}, dist=0)
-            CLUSTERS[newID] = newCluster
+            G.CLUSTERS[newID] = newCluster
             # create new folders and cluster info
             newCluster.create()
             newCluster.writeInfo()
@@ -1314,9 +1302,9 @@ def splitBins():
         rightBound = zeroCluster.dist + BINWIDTH * 2  # BINWIDTH has changed
         for i in xrange(int(pow(2, SPLIT))):  # Repeat for each existing folder
             ID = "%i_%i" % (zeroCluster.majorID, i)  # This includes zeroCluster
-            cluster = CLUSTERS[ID]
+            cluster = G.CLUSTERS[ID]
             # Set the distance to the old cluster's right bound, then move it to the left
-            cluster.dist = round(rightBound - BINWIDTH * (i + 1), args.precision)
+            cluster.dist = round(rightBound - BINWIDTH * (i + 1), G.PRECISION)
             cluster.writeInfo()
 
     # re-read cluster info into database to prepare for move

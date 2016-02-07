@@ -7,6 +7,7 @@ from argparse import ArgumentParser
 from atom_tools import calcCenterAtoms, atomDist
 from shared import *
 from shutil import copy
+import lineMD_vars as G
 
 __author__ = "Charles Yuan"
 __credits__ = ["Charles Yuan", "David Koes", "Matthew Baumgartner"]
@@ -26,7 +27,7 @@ def main():
     global TOTALFRAMES
     if not args.skip:
         # Process the PDB files for the whole trajectory
-        TOTALFRAMES = getTotalFrames(PRMTOPPATH, COORDPATH)
+        TOTALFRAMES = getTotalFrames(PRMTOPPATH, G.COORDPATH)
         generatePDBs()
     else:
         TOTALFRAMES = max([int(name[6:][:-4]) for name in os.listdir(OUTPATH)
@@ -105,7 +106,6 @@ def prep():
              " coordinate file extension is invalid. Please specify a binary NetCDF file.\n" + END)
 
     global PRMTOPPATH
-    global COORDPATH
     global OUTPATH
     global DISTPATH
 
@@ -115,9 +115,9 @@ def prep():
     else:
         PRMTOPPATH = args.prmtop
     if not os.path.isabs(args.coord):
-        COORDPATH = WORKDIR + "/" + args.coord
+        G.COORDPATH = WORKDIR + "/" + args.coord
     else:
-        COORDPATH = args.coord
+        G.COORDPATH = args.coord
     if not os.path.isabs(args.out):
         OUTPATH = WORKDIR + "/" + args.out
     else:
@@ -164,7 +164,7 @@ def generatePDBs():
             script.write("""parm %s
 trajin %s %i %i 1
 trajout frame_%i.pdb pdb
-""" % (PRMTOPPATH, COORDPATH, frame, frame, frame))
+""" % (PRMTOPPATH, G.COORDPATH, frame, frame, frame))
         system("cpptraj < frame_%i.in > /dev/null 2> /dev/null" % frame)
         unblocked_system("rm frame_%i.in" % frame)
         # noinspection PyUnresolvedReferences
@@ -189,7 +189,7 @@ def generateRSTs(frames):
             script.write("""parm %s
 trajin %s %i %i 1
 trajout frame_%i.rst restart
-""" % (PRMTOPPATH, COORDPATH, frame, frame, frame))
+""" % (PRMTOPPATH, G.COORDPATH, frame, frame, frame))
         system("cpptraj < frame_%i.in > /dev/null 2> /dev/null" % frame)
         unblocked_system("rm frame_%i.in" % frame)
         # noinspection PyUnresolvedReferences

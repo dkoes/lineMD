@@ -10,6 +10,7 @@ from lineMD_RMSD import log
 from numpy import zeros
 from shutil import copy
 from process_traj import getTotalFrames
+import lineMD_vars as G
 
 __author__ = "Charles Yuan"
 __credits__ = ["Charles Yuan", "David Koes", "Matthew Baumgartner"]
@@ -148,7 +149,6 @@ def prep():
 
 def calcRefCoords():
     """Reads the coordinates of the reference file into the global variable."""
-    global REFCOORDS
     global SEGMENTS
     pdbLines = []
     with open(REFPATH) as pdb:
@@ -172,7 +172,7 @@ def calcRefCoords():
     for index, line in enumerate(pdbLines):
         for j in range(3):
             coords[index, j] = float(line[(30 + j * 8):(38 + j * 8)])
-    REFCOORDS = coords
+    G.REFCOORDS = coords
 
 
 def generatePDBs():
@@ -190,7 +190,7 @@ def generatePDBs():
     """ % (PRMTOPPATH, COORDPATH, frame, frame, frame))
             system("cpptraj < frame_%i.in > /dev/null 2> /dev/null" % frame)
             with open("frame_%i.pdb" % frame) as pdb:
-                thisDist = rmsdDist(pdbLines=list(pdb), refCoords=REFCOORDS, segments=SEGMENTS)
+                thisDist = rmsdDist(pdbLines=list(pdb), refCoords=G.REFCOORDS, segments=SEGMENTS)
                 log("Frame %i has dist %.3f\n" % (frame, thisDist))
                 return frame, thisDist
 
