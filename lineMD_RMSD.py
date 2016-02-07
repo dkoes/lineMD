@@ -19,7 +19,7 @@ import random
 from shared import *
 import shutil, sys
 from stat import S_IEXEC
-from time import strftime
+from time import strftime,sleep
 
 __author__ = "Charles Yuan"
 __license__ = "GPL"
@@ -56,6 +56,7 @@ def main():
     runInit = not prep()
 
     global COORDPATH
+    global REFCOORDS 
 
     if not os.path.isfile(WORKDIR + "/init.rst.gz"):
         system("gzip -c %s > init.rst.gz" % COORDPATH)
@@ -65,6 +66,7 @@ def main():
         log("Reading reference structure for RMSD\n")
         calcRefCoords(args.ref)
     else:
+        REFCOORDS = None
         log("Computing distances between centroids\n")
 
     if args.stitch:
@@ -141,7 +143,7 @@ def parse():
     args = parser.parse_args()
     
     if args.ref == None and args.segments == None:
-        print "Need at least one of ref (for rmsd comparison) and/or segments (for distance)"
+        print( "Need at least one of ref (for rmsd comparison) and/or segments (for distance)")
         sys.exit(1)
 
 
@@ -450,7 +452,7 @@ class Run(object):
             return rmsdDist(pdbLines, refCoords, segments)
         elif segments != None and len(segments) == 2:
             centers = calcSegmentCenters(pdbLines, segments)
-            return norm(centers[0]-centers[1])
+            return -norm(centers[0]-centers[1]) #hack so we go the same way as rmsd
         else:
             log(RED + UNDERLINE + "Error:" + END + RED + " Need reference coordinates and/or segments\n")
             sys.exit(1)
@@ -466,14 +468,14 @@ class Run(object):
 
             if self._clusterID == '0_0' and self._ID == 0:  # This is initial, skip all that stuff
                 with open(self.path + "/frame_0.pdb") as pdb:
-                    self._dist = reactionDistance(pdbLines=list(pdb), refCoords=REFCOORDS, segments=SEGMENTS)
+                    self._dist = self.reactionDistance(pdbLines=list(pdb), refCoords=REFCOORDS, segments=SEGMENTS)
                 self.writeInfo()
                 return self._dist, 0
 
             else:  # This is not initial
                 def getDist(fr):
                     with open(self.path + "/frame_%i.pdb" % fr) as thisPDB:
-                        dist = reactionDistance(pdbLines=list(thisPDB), refCoords=REFCOORDS, segments=SEGMENTS)
+                        dist = self.reactionDistance(pdbLines=list(thisPDB), refCoords=REFCOORDS, segments=SEGMENTS)
                     return fr, dist
 
                 with directory(self.path):
@@ -906,11 +908,11 @@ def calcRefCoords(ref):
     global REFCOORDS
     
     if not os.path.isfile(WORKDIR + "/reference.pdb"):
-    with open("ptraj.in", 'w') as script:
+     with open("ptraj.in", 'w') as script:
         script.write("parm %s\n" % REFPRMTOPPATH)
         script.write("trajin %s 1 1 1\n" % ref)
         script.write("trajout reference.pdb pdb\n")
-    system("cpptraj < ptraj.in > /dev/null 2> /dev/null")
+     system("cpptraj < ptraj.in > /dev/null 2> /dev/null")
         
     pdbLines = []
     with open(WORKDIR + "/reference.pdb") as pdb:
