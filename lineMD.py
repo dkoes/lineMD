@@ -18,7 +18,6 @@ from shared import *
 import shutil
 from stat import S_IEXEC
 from time import sleep, strftime
-
 __author__ = "Charles Yuan"
 __license__ = "GPL"
 __version__ = "2.0"
@@ -1561,13 +1560,9 @@ def stitchTrajectory():
 def eventLoop():
     """Handles pausing and analysis when runs complete."""
     global PAUSE
-<<<<<<< HEAD
-=======
-    global CLUSTERS
-    global WORKDIR
->>>>>>> parent of 9258efa... some bug fixes
     global RUNNING
     global THREADS
+    print(sorted(globals().keys()))
 
     while True:
         # Check currently running processes
