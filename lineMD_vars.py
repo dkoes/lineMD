@@ -1,0 +1,33 @@
+'''A shared module for storing global variables'''
+
+args = None
+BINWIDTH = None
+CLUSTERS = None
+COORDPATH = None
+DISTPATH = None
+FIRSTPATH = None
+FRAMESPATH = None
+LIGANDATOM = None
+LINEPATH = None
+MAX = None
+MIN = None
+NOPROGRESS = None
+NOPROGRESSCUTOFF = None
+OUTPATH = None
+PAUSE = None
+PRECISION = None
+PRMTOPPATH = None
+PROTEINATOM = None
+REFCOORDS = None
+REFPATH = None
+REFPRMTOPPATH = None
+RESTARTPATH = None
+RUNANALYSIS = None
+RUNNING = None
+SEGMENTS = None
+SPLIT = None
+SPLITMAX = None
+THREADS = None
+TOTALFRAMES = None
+TRASHPATH = None
+WORKDIR = None

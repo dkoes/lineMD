@@ -65,7 +65,10 @@ def main():
         log("Reading reference structure for RMSD\n")
         calcRefCoords(args.ref)
     else:
+<<<<<<< HEAD
         G.REFCOORDS = None
+=======
+>>>>>>> parent of 9258efa... some bug fixes
         log("Computing distances between centroids\n")
 
     if args.stitch:
@@ -87,7 +90,10 @@ def main():
     if not os.path.isdir(G.WORKDIR + "/CR"):
         fail(RED + UNDERLINE + "Error:" + END + RED + " the running cluster is missing.\n" + END)
     elif not runInit:
+<<<<<<< HEAD
         print("WORKDIR",G.WORKDIR)
+=======
+>>>>>>> parent of 9258efa... some bug fixes
         finishedRuns = getFinishedRuns()
         if finishedRuns:
             analysis(finishedRuns)
@@ -141,10 +147,16 @@ def parse():
                         type=str, action="store")
     args = parser.parse_args()
     
+<<<<<<< HEAD
     if (args.ref == None) and (args.segments == None):
        print('Need at least one of ref (for rmsd comparison) and/or segments (for distance)')
        sys.exit(1)
     return args
+=======
+    if args.ref == None and args.segments == None:
+        print "Need at least one of ref (for rmsd comparison) and/or segments (for distance)"
+        sys.exit(1)
+>>>>>>> parent of 9258efa... some bug fixes
 
 
 def prep(args):
@@ -452,7 +464,7 @@ class Run(object):
             return rmsdDist(pdbLines, refCoords, segments)
         elif segments != None and len(segments) == 2:
             centers = calcSegmentCenters(pdbLines, segments)
-            return -norm(centers[0]-centers[1]) #hack so distances go in same direction as rmsd
+            return norm(centers[0]-centers[1])
         else:
             log(RED + UNDERLINE + "Error:" + END + RED + " Need reference coordinates and/or segments\n")
             sys.exit(1)
@@ -468,14 +480,22 @@ class Run(object):
 
             if self._clusterID == '0_0' and self._ID == 0:  # This is initial, skip all that stuff
                 with open(self.path + "/frame_0.pdb") as pdb:
+<<<<<<< HEAD
                     self._dist = self.reactionDistance(pdbLines=list(pdb), refCoords=G.REFCOORDS, segments=SEGMENTS)
+=======
+                    self._dist = reactionDistance(pdbLines=list(pdb), refCoords=REFCOORDS, segments=SEGMENTS)
+>>>>>>> parent of 9258efa... some bug fixes
                 self.writeInfo()
                 return self._dist, 0
 
             else:  # This is not initial
                 def getDist(fr):
                     with open(self.path + "/frame_%i.pdb" % fr) as thisPDB:
+<<<<<<< HEAD
                         dist = self.reactionDistance(pdbLines=list(thisPDB), refCoords=G.REFCOORDS, segments=SEGMENTS)
+=======
+                        dist = reactionDistance(pdbLines=list(thisPDB), refCoords=REFCOORDS, segments=SEGMENTS)
+>>>>>>> parent of 9258efa... some bug fixes
                     return fr, dist
 
                 with directory(self.path):
@@ -902,12 +922,17 @@ trajout frame_0.pdb pdb
 def calcRefCoords(ref):
     """Reads the coordinates of the reference file into the global variable."""
     
+<<<<<<< HEAD
     if not os.path.isfile(G.WORKDIR + "/reference.pdb"):
      with open("ptraj.in", 'w') as script:
+=======
+    if not os.path.isfile(WORKDIR + "/reference.pdb"):
+    with open("ptraj.in", 'w') as script:
+>>>>>>> parent of 9258efa... some bug fixes
         script.write("parm %s\n" % REFPRMTOPPATH)
         script.write("trajin %s 1 1 1\n" % ref)
         script.write("trajout reference.pdb pdb\n")
-     system("cpptraj < ptraj.in > /dev/null 2> /dev/null")
+    system("cpptraj < ptraj.in > /dev/null 2> /dev/null")
         
     pdbLines = []
     with open(G.WORKDIR + "/reference.pdb") as pdb:
