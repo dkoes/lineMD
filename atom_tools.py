@@ -2,7 +2,7 @@
 # atom_tools.py
 # Collection of PDB and atom/protein related functions
 
-from numpy import array, dot, transpose, zeros, sum, sqrt
+from numpy import array, dot, transpose, zeros, sum, sqrt, mean
 from numpy.linalg import svd, det
 from shared import *
 
@@ -136,7 +136,18 @@ def calcCenter(pdbLines):
 
     return center
 
-
+def calcSegmentCenters(pdbLines, segments):
+    '''Given a pdf file and segments (range of residues) calculate the center ofs the alpha carbons'''
+    segmentCoords = [ [] for i in segments ]
+    for pdbLine in pdbLines:
+        if pdbLine[13:15] == "CA":
+            resID = int(pdbLine[22:26])
+            for (i,tup) in enumerate(segments):
+                if tup[0] <= resID <= tup[1]:
+                    coord = array([float(pdbLine[(30 + c * 8):(38 + c * 8)]) for c in range(3)])
+                    segmentCoords[i].append(coord)
+    return [ mean(array(coords),axis=0) for coords in segmentCoords]
+    
 def calcCenterAtoms(pdbLines):
     """Given a pdb file, calculate the centers of the ligand and the protein"""
     pPDB = []

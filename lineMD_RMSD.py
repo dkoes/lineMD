@@ -9,15 +9,16 @@
 
 from __future__ import division, print_function
 from argparse import ArgumentParser, SUPPRESS
-from atom_tools import rmsdDist
+from atom_tools import rmsdDist, calcSegmentCenters
 import copy
 from glob import glob
 from lineMD import eventLoop, determineSplit, getFinishedRuns, stitchTrajectory  # and exportRestarts
 from numpy import zeros
+from numpy.linalg import norm
 from operator import attrgetter
 import random
 from shared import *
-import shutil
+import shutil, sys
 from stat import S_IEXEC
 from time import strftime
 
@@ -61,14 +62,7 @@ def main():
         system("gzip -c %s > init.rst.gz" % COORDPATH)
     COORDPATH = WORKDIR + "/init.rst.gz"
 
-    if not os.path.isfile(WORKDIR + "/reference.pdb"):
-        with open("ptraj.in", 'w') as script:
-            script.write("parm %s\n" % REFPRMTOPPATH)
-            script.write("trajin %s 1 1 1\n" % args.ref)
-            script.write("trajout reference.pdb pdb\n")
-        system("cpptraj < ptraj.in > /dev/null 2> /dev/null")
-
-    calcRefCoords()
+    calcRefCoords(args.ref)
 
     if args.stitch:
         log("Reading cluster information.\n")
@@ -103,7 +97,7 @@ def parse():
     parser = ArgumentParser(description="execute linear MD simulations with AMBER.")
     parser.add_argument("--prmtop", '-p', help="AMBER topology file", type=str, action=FullPath, required=True)
     parser.add_argument("--coord", '-c', help="restart file from equilibration", type=str, action=FullPath)
-    parser.add_argument("--ref", help="reference coordinate file at endpoint", type=str, action=FullPath, required=True)
+    parser.add_argument("--ref", help="reference coordinate file at endpoint", type=str, action=FullPath, required=False)
     parser.add_argument("--refprmtop", help="topology for reference file", type=str, action=FullPath)
     parser.add_argument("--min", help="endpoint RMSD", action="store", type=float)
     parser.add_argument("--max", help="maximum RMSD change permitted (traveling in incorrect direction)",
@@ -142,6 +136,10 @@ def parse():
                         type=str, action="store")
     global args
     args = parser.parse_args()
+    
+    if args.ref == None and args.segments == None:
+        print "Need at least one of ref (for rmsd comparison) and/or segments (for distance)"
+        sys.exit(1)
 
 
 def prep():
@@ -442,6 +440,18 @@ class Run(object):
             else:
                 return False  # file does not exist
 
+    def reactionDistance(self, pdbLines, refCoords, segments):
+        '''Calculate the reaction coordinate distance which is RMSD if a
+            reference structure is specified and distance between centroids otherwise.'''
+        if refCoords != None:
+            return rmsdDist(pdbLines, refCoords, segments)
+        elif segments != None and len(segments) == 2:
+            centers = calcSegmentCenters(pdbLines, segments)
+            return norm(centers[0]-centers[1])
+        else:
+            log(RED + UNDERLINE + "Error:" + END + RED + " Need reference coordinates and/or segments\n")
+            sys.exit(1)
+            
     def processDist(self):
         """Calculates the distance between the protein and ligand at the final frame and processes coordinate files.
         Returns (dist, frame) of the smallest dist
@@ -453,14 +463,14 @@ class Run(object):
 
             if self._clusterID == '0_0' and self._ID == 0:  # This is initial, skip all that stuff
                 with open(self.path + "/frame_0.pdb") as pdb:
-                    self._dist = rmsdDist(pdbLines=list(pdb), refCoords=REFCOORDS, segments=SEGMENTS)
+                    self._dist = reactionDistance(pdbLines=list(pdb), refCoords=REFCOORDS, segments=SEGMENTS)
                 self.writeInfo()
                 return self._dist, 0
 
             else:  # This is not initial
                 def getDist(fr):
                     with open(self.path + "/frame_%i.pdb" % fr) as thisPDB:
-                        dist = rmsdDist(pdbLines=list(thisPDB), refCoords=REFCOORDS, segments=SEGMENTS)
+                        dist = reactionDistance(pdbLines=list(thisPDB), refCoords=REFCOORDS, segments=SEGMENTS)
                     return fr, dist
 
                 with directory(self.path):
@@ -894,10 +904,17 @@ trajout frame_0.pdb pdb
     log(GREEN + "%i initial runs have begun on %s.\n" % (RUNNING, strftime("%c")) + END)
 
 
-def calcRefCoords():
+def calcRefCoords(ref):
     """Reads the coordinates of the reference file into the global variable."""
     global REFCOORDS
-    global SEGMENTS
+    
+    if not os.path.isfile(WORKDIR + "/reference.pdb"):
+    with open("ptraj.in", 'w') as script:
+        script.write("parm %s\n" % REFPRMTOPPATH)
+        script.write("trajin %s 1 1 1\n" % ref)
+        script.write("trajout reference.pdb pdb\n")
+    system("cpptraj < ptraj.in > /dev/null 2> /dev/null")
+        
     pdbLines = []
     with open(WORKDIR + "/reference.pdb") as pdb:
         if SEGMENTS is None:  # Process everything
