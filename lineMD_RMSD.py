@@ -612,23 +612,34 @@ $cmd
             with open("line.in", 'w') as inputFile:
                 if initial:
                     inputFile.write("""&cntrl
- imin = 0, ntx = 1, irest = 0,
- ntpr = 10000, ntwr = -%i, ntwx = %i, ntxo = 1,
- ntf = 2, ntc = 2, cut = 9999,
- ntb = 0,  nstlim = %i, dt = 0.002,
- temp0 = 300.0, ntt = 3, ig = -1,
- igb = 1, ioutfm = 1,
-/
+  imin = 0, irest = 1, ntx = 1,
+  ntb = 2, pres0 = 1.0, ntp = 1,
+  taup = 2.0,
+  cut = 10.0, ntr = 0,
+  ntc = 2, ntf = 2,
+  tempi = 300, temp0 = 300,
+  ntt = 3, gamma_ln = 1.0,
+  dt = 0.002, ntxo = 2,
+  ntwr = -%i, ntwx = %i, nstlim = %i,
+  ntpr = 5000, 
+  ioutfm = 1, ig = -1
+ /
+
 """ % (int(args.steps / args.sample), int(args.steps / args.sample), args.steps))  # sample, not frame here
                 else:  # Restart file
                     inputFile.write("""&cntrl
- imin = 0, ntx = 5, irest = 1,
- ntpr = 10000, ntwr = -%i, ntwx = %i, ntxo = 1,
- ntf = 2, ntc = 2, cut = 9999,
- ntb = 0,  nstlim = %i, dt = 0.002,
- temp0 = 300.0, ntt = 3, ig = -1,
- igb = 1, ioutfm = 1,
-/
+  imin = 0, irest = 1, ntx = 7,
+  ntb = 2, pres0 = 1.0, ntp = 1,
+  taup = 2.0,
+  cut = 10.0, ntr = 0,
+  ntc = 2, ntf = 2,
+  tempi = 300, temp0 = 300,
+  ntt = 3, gamma_ln = 1.0,
+  dt = 0.002, ntxo = 2,
+  ntwr = -%i, ntwx = %i, nstlim = %i,
+  ntpr = 5000, 
+  ioutfm = 1, ig = -1 
+ /
 """ % (int(args.steps / args.sample), int(args.steps / args.sample), args.steps))
 
     def writeInfo(self):
@@ -1423,8 +1434,8 @@ def stitchTrajectory():
             else:
                 for i in xrange(PAUSE):
                     time = (PAUSE - i)
-                    log((BOLD + "\rWill check again in " + MAGENTA + str(time) + END + BOLD +
-                         " second" + ("s." if time > 1 else ".")).ljust(getTerminalWidth()) + END)
+                    #log((BOLD + "\rWill check again in " + MAGENTA + str(time) + END + BOLD +
+                    #     " second" + ("s." if time > 1 else ".")).ljust(getTerminalWidth()) + END)
                     sleep(1)
                 log("\r")
 
@@ -1496,8 +1507,8 @@ def eventLoop():
             # pause main thread for some seconds
             for i in xrange(PAUSE):
                 time = (PAUSE - i)
-                log((BOLD + "\rWill check again in " + MAGENTA + str(time) + END + BOLD +
-                     " second" + ("s." if time > 1 else ".")).ljust(getTerminalWidth()) + END)
+                #log((BOLD + "\rWill check again in " + MAGENTA + str(time) + END + BOLD +
+                #    " second" + ("s." if time > 1 else ".")).ljust(getTerminalWidth()) + END)
                 sleep(1)
             log("\r")
 
