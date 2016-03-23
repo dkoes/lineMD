@@ -560,7 +560,19 @@ class Run(object):
 
                 with open("qscript", 'w') as qscript:
                     qscript.write("""#!/bin/bash
-gunzip begin.rst.gz >> out 2>&1
+#scratch drive folder to work in
+SCRDIR=/scr/$PBS_JOBID
+
+#if the scratch drive doesn't exist (it shouldn't) make it.
+if [[ ! -e $SCRDIR ]]; then
+        mkdir $SCRDIR
+fi
+cd $SCRDIR
+
+cp $PBS_O_WORKDIR/*.in ${SCRDIR}
+cp $PBS_O_WORKDIR/*.prmtop ${SCRDIR}
+                    
+gunzip $PBS_O_WORKDIR/begin.rst.gz >> out 2>&1
 pmemd.cuda -O -i line.in -o line.out -p %s -c begin.rst -r frame -x coord.nc
 for f in frame*; do mv "$f" "$f.rst" >> out 2>&1; done
 gzip line.out >> out 2>&1
@@ -575,7 +587,8 @@ do
 done
 gzip ptraj_frames.out >> out 2>&1
 touch finished >> out 2>&1
-$cmd
+
+mv * $PBS_O_WORKDIR/
 """ % (PRMTOPPATH, frameSeparation, frameSeparation, args.steps, PRMTOPPATH))
             elif args.queue_name == "gpu_short":
                 with open("run.sh", 'w') as runScript:
