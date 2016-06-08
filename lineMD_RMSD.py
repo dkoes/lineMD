@@ -556,7 +556,7 @@ class Run(object):
                 with open("run.sh", 'w') as runScript:
                     runScript.write("#!/bin/bash\n")
                     runScript.write("sleep 0.5; qsub -d . -q %s -S /bin/bash -N lineMD_R%i -l "
-                                    "nodes=1:ppn=1:gpus=1 %s/qscript\n" % (args.queue_name, self._ID, self.path))
+                                    "nodes=n140.dcb.private.net:ppn=1:gpus=1 %s/qscript\n" % (args.queue_name, self._ID, self.path))
 
                 with open("qscript", 'w') as qscript:
                     qscript.write("""#!/bin/bash
@@ -571,8 +571,8 @@ cd $SCRDIR
 
 cp $PBS_O_WORKDIR/*.in ${SCRDIR}
 cp $PBS_O_WORKDIR/*.prmtop ${SCRDIR}
-                    
-gunzip $PBS_O_WORKDIR/begin.rst.gz >> out 2>&1
+cp $PBS_O_WORKDIR/begin.rst.gz ${SCRDIR}
+gunzip begin.rst.gz >> out 2>&1
 pmemd.cuda -O -i line.in -o line.out -p %s -c begin.rst -r frame -x coord.nc
 for f in frame*; do mv "$f" "$f.rst" >> out 2>&1; done
 gzip line.out >> out 2>&1
@@ -586,9 +586,9 @@ do
     cpptraj < ptraj_${i}.in >> ptraj_frames.out 2>&1
 done
 gzip ptraj_frames.out >> out 2>&1
-touch finished >> out 2>&1
 
 mv * $PBS_O_WORKDIR/
+touch $PBS_O_WORKDIR/finished >> out 2>&1
 """ % (PRMTOPPATH, frameSeparation, frameSeparation, args.steps, PRMTOPPATH))
             elif args.queue_name == "gpu_short":
                 with open("run.sh", 'w') as runScript:
@@ -625,7 +625,7 @@ $cmd
             with open("line.in", 'w') as inputFile:
                 if initial:
                     inputFile.write("""&cntrl
-  imin = 0, irest = 1, ntx = 1,
+  imin = 0, irest = 0, ntx = 1,
   ntb = 2, pres0 = 1.0, ntp = 1,
   taup = 2.0,
   cut = 10.0, ntr = 0,
