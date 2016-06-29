@@ -1225,7 +1225,7 @@ def findNewRuns():
 
     alreadySelected = False
     # Find cluster with least explored value, then largest bin number (bin will never tie)
-    clusterList = [c for c in CLUSTERS.values() if c.ID != 'R' and c.count > 0]
+    clusterList = [c for c in CLUSTERS.values() if c.ID != 'R' and c.count > 0 and c.dist < args.max+BINWIDTH]
     maxBinID = max([c.rawID for c in clusterList if c.count > 0])
     while RUNNING < THREADS:
         if args.adjust:
